@@ -1,41 +1,47 @@
 use std::collections::HashMap;
 
 use crate::core::{
-    actor::{DormantActor, DynDormantActor},
-    inbound::{InboundMessage, ForwardMessage, InboundReceptionTrait},
-    outbound::OutboundDistributionTrait,
-    state::StateTrait,
+    actor::{DormantActorImpl, DormantActorNode},
+    inbound::{ForwardMessage, InboundHub, InboundMessage},
+    outbound::OutboundHub,
+    value::Value,
 };
 
-/// Runner of the hollywood compute graph.
-pub trait RunnerTrait<
-    InboundReception: InboundReceptionTrait<State, OutboundDistribution, M>,
-    State: StateTrait,
-    OutboundDistribution: OutboundDistributionTrait,
+/// Runner executes the pipeline.
+pub trait Runner<
+    Prop,
+    Inbound: InboundHub<Prop, State, Outbound, M>,
+    State: Value,
+    Outbound: OutboundHub,
     M: InboundMessage,
 >
 {
-    /// Produces a new dormant actor.
+    /// Create a new dormant actor to be stored by the context.
     fn new_dormant_actor(
         name: String,
+        prop: Prop,
         state: State,
         receiver: tokio::sync::mpsc::Receiver<M>,
-        forward: HashMap<String, Box<dyn ForwardMessage<State, OutboundDistribution, M> + Send + Sync>>,
-        outbound: OutboundDistribution,
-    ) -> Box<dyn DynDormantActor + Send + Sync>;
+        forward: HashMap<
+            String,
+            Box<dyn ForwardMessage<Prop, State, Outbound, M> + Send + Sync>,
+        >,
+        outbound: Outbound,
+    ) -> Box<dyn DormantActorNode + Send + Sync>;
 }
 
-/// The default runner for the hollywood compute graph.
+/// The default runner.
 pub struct DefaultRunner<
-    InboundReception: Send + Sync,
-    State: StateTrait,
-    OutboundDistribution: Send + Sync + 'static,
+    Prop,
+    Inbound: Send + Sync,
+    State: Value,
+    Outbound: Send + Sync + 'static,
 > {
-    phantom: std::marker::PhantomData<(InboundReception, State, OutboundDistribution)>,
+    phantom: std::marker::PhantomData<(Prop, Inbound, State, Outbound)>,
 }
 
-impl<State: StateTrait, InboundReception: Send + Sync, OutboundDistribution: Send + Sync + 'static>
-    DefaultRunner<InboundReception, State, OutboundDistribution>
+impl<Prop, State: Value, Inbound: Send + Sync, Outbound: Send + Sync + 'static>
+    DefaultRunner<Prop, Inbound, State, Outbound>
 {
     /// Create a new default runner.
     pub fn new() -> Self {
@@ -45,8 +51,8 @@ impl<State: StateTrait, InboundReception: Send + Sync, OutboundDistribution: Sen
     }
 }
 
-impl<State: StateTrait, InboundReception: Send + Sync, OutboundDistribution: Send + Sync + 'static> Default
-    for DefaultRunner<InboundReception, State, OutboundDistribution>
+impl<Prop, State: Value, Inbound: Send + Sync, Outbound: Send + Sync + 'static> Default
+    for DefaultRunner<Prop, Inbound, State, Outbound>
 {
     fn default() -> Self {
         Self::new()
@@ -54,22 +60,28 @@ impl<State: StateTrait, InboundReception: Send + Sync, OutboundDistribution: Sen
 }
 
 impl<
-        InboundReception: InboundReceptionTrait<State, OutboundDistribution, M>,
-        State: StateTrait,
-        OutboundDistribution: OutboundDistributionTrait,
+        Prop: Value,
+        Inbound: InboundHub<Prop, State, Outbound, M>,
+        State: Value,
+        Outbound: OutboundHub,
         M: InboundMessage,
-    > RunnerTrait<InboundReception, State, OutboundDistribution, M>
-    for DefaultRunner<InboundReception, State, OutboundDistribution>
+    > Runner<Prop, Inbound, State, Outbound, M>
+    for DefaultRunner<Prop, Inbound, State, Outbound>
 {
     fn new_dormant_actor(
         name: String,
+        prop: Prop,
         init_state: State,
         receiver: tokio::sync::mpsc::Receiver<M>,
-        forward: HashMap<String, Box<dyn ForwardMessage<State, OutboundDistribution, M> + Send + Sync>>,
-        outbound: OutboundDistribution,
-    ) -> Box<dyn DynDormantActor + Send + Sync> {
-        Box::new(DormantActor::<State, OutboundDistribution, M> {
+        forward: HashMap<
+            String,
+            Box<dyn ForwardMessage<Prop, State, Outbound, M> + Send + Sync>,
+        >,
+        outbound: Outbound,
+    ) -> Box<dyn DormantActorNode + Send + Sync> {
+        Box::new(DormantActorImpl::<Prop, State, Outbound, M> {
             name: name.clone(),
+            prop,
             receiver,
             outbound,
             forward,

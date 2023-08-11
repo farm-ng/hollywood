@@ -29,3 +29,5 @@ strum = { version = "0.25", features = ["derive"] }
 hollywood_macros = { version = "0.1.0", path = "hollywood_macros" }
 rand_distr = "0.4.3"
 nalgebra = "0.32.2"
+grid = "0.10.0"
+drawille = "0.3.0"

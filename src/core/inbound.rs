@@ -1,42 +1,36 @@
 use crate::compute::context::Context;
-use crate::core::{
-    actor_builder::ActorBuilder, outbound::OutboundDistributionTrait, state::StateTrait,
-};
+use crate::core::{actor_builder::ActorBuilder, outbound::OutboundHub, value::Value};
 
-/// InboundReception is a collection of inbound channels for an actor.
-pub trait InboundReceptionTrait<State: StateTrait, OutboundDistribution, M: InboundMessage>:
-    Send + Sync
-{
-    /// All inbounds for this actor.
-    type AllInbounds;
-
-    /// Create a new reception for an actor.
+/// The inbound hub is a collection of inbound channels.
+pub trait InboundHub<Prop, State: Value, OutboundHub, M: InboundMessage>: Send + Sync {
+    /// Create a new inbound hub for an actor.
     fn from_builder(
-        builder: &mut ActorBuilder<State, OutboundDistribution, M>,
+        builder: &mut ActorBuilder<Prop, State, OutboundHub, M>,
         actor_name: &str,
     ) -> Self;
 }
 
-/// A reception which has no inbound channels.
+/// An empty inbound hub - for actors with no inbound channels.
 #[derive(Debug, Clone)]
-pub struct NullInbounds {}
+pub struct NullInbound {}
 
-impl<State: StateTrait, OutboundDistribution, NullMessage: InboundMessage>
-    InboundReceptionTrait<State, OutboundDistribution, NullMessage> for NullInbounds
+impl<Prop, State: Value, OutboundHub, NullMessage: InboundMessage>
+    InboundHub<Prop, State, OutboundHub, NullMessage> for NullInbound
 {
-    type AllInbounds = NullInbounds;
     fn from_builder(
-        _builder: &mut ActorBuilder<State, OutboundDistribution, NullMessage>,
+        _builder: &mut ActorBuilder<Prop, State, OutboundHub, NullMessage>,
         _actor_name: &str,
     ) -> Self {
         Self {}
     }
 }
 
-/// Inbound channel for messages which are received by the actor.
+/// Inbound channel to receive messages of a specific type `T`.
+/// 
+/// Inbound channels can be connected to one or more outbound channels of upstream actors. 
 #[derive(Debug, Clone)]
 pub struct InboundChannel<T, M: InboundMessage> {
-    /// Unique name of the inbound channel.
+    /// Unique identifier of the inbound channel.
     pub name: String,
     /// Name of the actor that the inbound messages are for.
     pub actor_name: String,
@@ -47,7 +41,7 @@ pub struct InboundChannel<T, M: InboundMessage> {
 impl<T: Default + Clone + Send + Sync + std::fmt::Debug + 'static, M: InboundMessage>
     InboundChannel<T, M>
 {
-    /// Create a new inbound for actor in provided context.
+    /// Creates a new inbound channel.
     pub fn new(
         context: &mut Context,
         actor_name: &str,
@@ -64,85 +58,92 @@ impl<T: Default + Clone + Send + Sync + std::fmt::Debug + 'static, M: InboundMes
     }
 }
 
-/// Inbound messages which are received by an actor.
+/// Inbound messages to be received by the actor.
 pub trait InboundMessage: Send + Sync + Clone + 'static {
+    /// Prop type of the receiving actor.
+    type Prop: Value;
+
     /// State type of the receiving actor.
-    type State: StateTrait;
+    type State: Value;
 
-    /// OutboundDistribution type of the receiving actor, to produce outbound messages downstream.
-    type OutboundDistribution: Send + Sync + 'static;
+    /// OutboundHub type of the receiving actor, to produce outbound messages downstream.
+    type OutboundHub: Send + Sync + 'static;
 
-    /// Name of the inbound that this message is for.
-    fn inbound_name(&self) -> String;
+    /// Name of the inbound channel that this message is for.
+    fn inbound_channel(&self) -> String;
 }
 
 /// Customization point for processing inbound messages.
 pub trait OnMessage: InboundMessage {
-    /// Process the inbound message - user code goes here.
-    fn on_message(&self, state: &mut Self::State, outbound: &Self::OutboundDistribution);
+    /// Process the inbound message - user code with main business logic goes here.
+    fn on_message(&self, prop: &Self::Prop, state: &mut Self::State, outbound: &Self::OutboundHub);
 }
 
-/// Trait for creating inbound messages.
+/// Trait for creating inbound messages of compatible types `T`.
 pub trait InboundMessageNew<T>:
     std::fmt::Debug + Send + Sync + Clone + 'static + InboundMessage
 {
-    /// Create a new inbound message.
-    fn new(inbound_name: String, msg: T) -> Self;
+    /// Create a new inbound message from the inbound channel name and the message value of type `T`.
+    fn new(inbound_channel: String, value: T) -> Self;
 }
 
-/// Forward message, to be processed by OnMessage customization point.
-pub trait ForwardMessage<State: StateTrait, OutboundDistribution, M: InboundMessage> {
+/// Message forwarder.
+pub trait ForwardMessage<
+Prop: Value,
+State: Value, OutboundHub, M: InboundMessage> {
     /// Forward the message to the OnMessage customization point.
-    fn forward_message(&self, state: &mut State, outbound: &OutboundDistribution, msg: M);
+    fn forward_message(&self, prop: &Prop, state: &mut State, outbound: &OutboundHub, msg: M);
 }
 
 impl<
         T: Default + Clone + Send + Sync + std::fmt::Debug + 'static,
-        State: StateTrait,
-        OutboundDistribution,
-        M: OnMessage<State = State, OutboundDistribution = OutboundDistribution>,
-    > ForwardMessage<State, OutboundDistribution, M> for InboundChannel<T, M>
+        Prop: Value,
+        State: Value,
+        OutboundHub,
+        M: OnMessage<Prop=Prop, State = State, OutboundHub = OutboundHub>,
+    > ForwardMessage<Prop,State, OutboundHub, M> for InboundChannel<T, M>
 {
-    fn forward_message(&self, state: &mut State, outbound: &OutboundDistribution, msg: M) {
-        msg.on_message(state, outbound);
+    fn forward_message(&self, prop: &Prop, state: &mut State, outbound: &OutboundHub, msg: M) {
+        msg.on_message(prop, state, outbound);
     }
 }
 
-/// Null message is a marker message which does nothing.
+/// Null message is a marker type for actors with no inbound channels.
 #[derive(Debug)]
-pub enum NullMessage<S: StateTrait, O: OutboundDistributionTrait> {
+pub enum NullMessage<P: Value, S: Value, O: OutboundHub> {
     /// Null message.
-    NullMessage(std::marker::PhantomData<(S, O)>),
+    NullMessage(std::marker::PhantomData<(P, S, O)>),
 }
 
-impl<S: StateTrait, O: OutboundDistributionTrait> NullMessage<S, O> {
-    /// Create a new null message.
+impl<P: Value, S: Value, O: OutboundHub> NullMessage<P, S, O> {
+    /// Creates a new null message.
     pub fn new() -> Self {
         NullMessage::NullMessage(std::marker::PhantomData {})
     }
 }
 
-impl<S: StateTrait, O: OutboundDistributionTrait> Default for NullMessage<S, O> {
+impl<P: Value, S: Value, O: OutboundHub> Default for NullMessage<P, S, O> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<S: StateTrait, O: OutboundDistributionTrait> Clone for NullMessage<S, O> {
+impl<P: Value, S: Value, O: OutboundHub> Clone for NullMessage<P, S, O> {
     fn clone(&self) -> Self {
         Self::new()
     }
 }
 
-impl<S: StateTrait, O: OutboundDistributionTrait> InboundMessage for NullMessage<S, O> {
+impl<P: Value, S: Value, O: OutboundHub> InboundMessage for NullMessage<P, S, O> {
+    type Prop = P;
     type State = S;
-    type OutboundDistribution = O;
+    type OutboundHub = O;
 
-    fn inbound_name(&self) -> String {
+    fn inbound_channel(&self) -> String {
         "".to_owned()
     }
 }
 
-impl<S: StateTrait, O: OutboundDistributionTrait> OnMessage for NullMessage<S, O> {
-    fn on_message(&self, _state: &mut Self::State, _outputs: &Self::OutboundDistribution) {}
+impl<P: Value, S: Value, O: OutboundHub> OnMessage for NullMessage<P, S, O> {
+    fn on_message(&self, _prop: &P, _state: &mut Self::State, _outputs: &Self::OutboundHub) {}
 }

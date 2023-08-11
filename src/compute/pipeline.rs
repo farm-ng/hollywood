@@ -1,28 +1,32 @@
 use std::mem::swap;
 
-use crate::compute::{Context,Topology};
-use crate::core::{DynActiveActor, InboundMessage, InboundMessageNew, NullOutbounds, NullState};
+use crate::compute::{Context, Topology};
+use crate::core::{
+    ActorNode, InboundMessage, InboundMessageNew, NullOutbound, NullProp, NullState,
+};
 
-/// Message to request an exiting a running compute graph.
+/// Message to request stop execution of the compute pipeline.
 #[derive(Debug, Clone)]
 pub enum CancelRequest {
-    /// Request to exit the compute graph.
+    /// Request to cancel the execution of the compute pipeline.
     Cancel(()),
 }
 
 impl CancelRequest {
-    /// Unique name for cancel request inbound channel.
-    pub const CANCEL_REQUEST_NAME: &str = "CANCEL";
+    /// Unique name for cancel request inbound channel. This special inbound channel is not
+    /// associated with any actor but with the pipeline itself.
+    pub const CANCEL_REQUEST_INBOUND_CHANNEL: &str = "CANCEL";
 }
 
 impl InboundMessage for CancelRequest {
+    type Prop = NullProp;
     type State = NullState;
-    type OutboundDistribution = NullOutbounds;
+    type OutboundHub = NullOutbound;
 
-    /// This messages is only meant to use for the exit request inbound of the context.
-    /// Hence, the inbound name is the constant EXIT_REQUEST_NAMER.
-    fn inbound_name(&self) -> String {
-        Self::CANCEL_REQUEST_NAME.to_owned()
+    /// This messages is only meant to use for the cancel request inbound channel of the pipeline.
+    /// Hence, the inbound name is the constant [CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL].
+    fn inbound_channel(&self) -> String {
+        Self::CANCEL_REQUEST_INBOUND_CHANNEL.to_owned()
     }
 }
 
@@ -32,20 +36,21 @@ impl InboundMessageNew<()> for CancelRequest {
     }
 }
 
-/// Compute graph, strictly speaking a DAG (directed acyclic graph) of actors.
-pub struct ComputeGraph {
-    actors: Vec<Box<dyn DynActiveActor + Send>>,
+/// Compute pipeline, strictly speaking a DAG (directed acyclic graph) of actors. It is created by
+/// the [Context::configure()] method.
+pub struct Pipeline {
+    actors: Vec<Box<dyn ActorNode + Send>>,
     topology: Topology,
     cancel_request_receiver: Option<tokio::sync::mpsc::Receiver<CancelRequest>>,
 }
 
-impl ComputeGraph {
+impl Pipeline {
     pub(crate) fn from_context(context: Context) -> Self {
         let mut active = vec![];
         for actor in context.actors.into_iter() {
             active.push(actor.activate());
         }
-        let compute_graph = ComputeGraph {
+        let compute_graph = Pipeline {
             actors: active,
             topology: context.topology,
             cancel_request_receiver: Some(context.cancel_request_receiver),
@@ -55,6 +60,22 @@ impl ComputeGraph {
     }
 
     /// Executes the compute graph.
+    ///
+    /// It consumes the self, starts  execution of the pipeline and returns a future (since it is 
+    /// an async function) that resolves to the pipeline itself. The future is completed when all 
+    /// actors have completed their execution.
+    ///
+    /// In particular, [ActorNode::run()] is called for each actor in the pipeline in a dedicated
+    /// tokio task. Hence, the actors run concurrently.
+    ///
+    /// TODO:
+    ///   Document state of actors before during and after completion, and validate that this is
+    ///   indeed the case.
+    ///    - All actors are set to its initial state right when this method is called and before
+    ///      the actual execution starts.
+    ///    - All actors remain their current state when the execution is completed.
+    ///    - Repeatable execution of the pipeline shall lead to comparable results.
+    ///      
     pub async fn run(mut self) -> Self {
         println!("START NEW RUN");
         let (kill_sender, _) = tokio::sync::broadcast::channel(10);
@@ -114,5 +135,10 @@ impl ComputeGraph {
 
         println!("END RUN");
         self
+    }
+
+    /// Printers the flow graph of the compute graph.
+    pub fn print_flow_graph(&self) {
+        self.topology.print_flow_graph();
     }
 }

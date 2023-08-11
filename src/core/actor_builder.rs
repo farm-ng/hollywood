@@ -3,35 +3,44 @@ use std::collections::HashMap;
 use crate::compute::context::Context;
 use crate::core::{
     actor::GenericActor,
-    inbound::{InboundMessage, ForwardMessage, InboundReceptionTrait},
-    outbound::OutboundDistributionTrait,
-    runner::RunnerTrait,
-    state::StateTrait,
+    inbound::{ForwardMessage, InboundHub, InboundMessage},
+    outbound::OutboundHub,
+    runner::Runner,
+    value::Value,
 };
 
-/// A build pattern for the actor.
-pub struct ActorBuilder<'a, State: StateTrait, OutboundDistribution, M: InboundMessage> {
-    /// unique name of the actor
+/// Creates actor from its components.
+/// 
+/// Used in  [`InboundHub::from_builder`] public interface.
+pub struct ActorBuilder<'a, Prop, State: Value, OutboundHub, M: InboundMessage> {
+    /// unique identifier of the actor
     pub actor_name: String,
+    prop: Prop,
     state: State,
     /// execution context
-    pub context: &'a mut Context,
+    pub  context: &'a mut Context,
     /// a channel for sending messages to the actor
-    pub sender: tokio::sync::mpsc::Sender<M>,
+    pub(crate) sender: tokio::sync::mpsc::Sender<M>,
     pub(crate) receiver: tokio::sync::mpsc::Receiver<M>,
     /// a collection of inbound channels
-    pub forward: HashMap<String, Box<dyn ForwardMessage<State, OutboundDistribution, M> + Send + Sync>>,
+    pub(crate) forward:
+        HashMap<String, Box<dyn ForwardMessage<Prop, State, OutboundHub, M> + Send + Sync>>,
 }
 
-impl<'a, State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: InboundMessage>
-    ActorBuilder<'a, State, OutboundDistribution, M>
+impl<'a, Prop, State: Value, Outbound: OutboundHub, M: InboundMessage>
+    ActorBuilder<'a, Prop, State, Outbound, M>
 {
-    /// Create the actor builder  from given actor name and initial state.
-    pub fn new(context: &'a mut Context, actor_name: &str, initial_state: State) -> Self {
+    pub(crate) fn new(
+        context: &'a mut Context,
+        actor_name: &str,
+        prop: Prop,
+        initial_state: State,
+    ) -> Self {
         let (sender, receiver) = tokio::sync::mpsc::channel(8);
 
         Self {
             actor_name: actor_name.to_owned(),
+            prop,
             state: initial_state,
             context,
             sender: sender.clone(),
@@ -40,23 +49,23 @@ impl<'a, State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: 
         }
     }
 
-    /// Create a new actor given its inbound reception and outbound distribution.
-    pub fn build<
-        InboundReception: InboundReceptionTrait<State, OutboundDistribution, M>,
-        Runner: RunnerTrait<InboundReception, State, OutboundDistribution, M>,
+    pub(crate) fn build<
+        Inbound: InboundHub<Prop, State, Outbound, M>,
+        Run: Runner<Prop, Inbound, State, Outbound, M>,
     >(
         self,
-        inbound: InboundReception,
-        outbound: OutboundDistribution,
-    ) -> GenericActor<InboundReception, State, OutboundDistribution, Runner> {
+        inbound: Inbound,
+        outbound: Outbound,
+    ) -> GenericActor<Prop, Inbound, State, Outbound, Run> {
         let mut actor = GenericActor {
             actor_name: self.actor_name.clone(),
             inbound,
             outbound,
             phantom: std::marker::PhantomData {},
         };
-        let sleeping = Runner::new_dormant_actor(
+        let sleeping = Run::new_dormant_actor(
             self.actor_name,
+            self.prop,
             self.state,
             self.receiver,
             self.forward,

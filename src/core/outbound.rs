@@ -4,17 +4,17 @@ use tokio::sync::mpsc::error::SendError;
 use crate::compute::context::Context;
 use crate::core::inbound::{InboundChannel, InboundMessage, InboundMessageNew};
 
-/// OutboundDistribution is a collection of outbound channels for an actor.
-pub trait OutboundDistributionTrait: Send + Sync + 'static + Morph {
-    /// Creates the OutboundDistribution from context and the actor name.
+/// OutboundHub is a collection of outbound channels for the actor.
+pub trait OutboundHub: Send + Sync + 'static + Morph {
+    /// Creates the OutboundHub from context and the actor name.
     fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self;
 }
 
-/// A OutboundDistribution which has no outbound channels.
+/// An empty outbound hub - used for actors that do not have any outbound channels.
 #[derive(Debug, Clone)]
-pub struct NullOutbounds {}
+pub struct NullOutbound {}
 
-impl Morph for NullOutbounds {
+impl Morph for NullOutbound {
     fn extract(&mut self) -> Self {
         Self {}
     }
@@ -22,7 +22,7 @@ impl Morph for NullOutbounds {
     fn activate(&mut self) {}
 }
 
-impl OutboundDistributionTrait for NullOutbounds {
+impl OutboundHub for NullOutbound {
     fn from_context_and_parent(_context: &mut Context, _actor_name: &str) -> Self {
         Self {}
     }
@@ -58,7 +58,7 @@ impl<T: Default + Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChann
         ctx.connect_impl(self, inbound);
         self.connection_register.push(Arc::new(OutboundConnection {
             sender: inbound.sender.clone(),
-            inbound_name: inbound.name.clone(),
+            inbound_channel: inbound.name.clone(),
             phantom: PhantomData {},
         }));
     }
@@ -95,17 +95,17 @@ impl<T> Morph for OutboundChannel<T> {
 #[derive(Debug, Clone)]
 pub(crate) struct OutboundConnection<T, M: InboundMessage> {
     pub(crate) sender: tokio::sync::mpsc::Sender<M>,
-    pub(crate) inbound_name: String,
+    pub(crate) inbound_channel: String,
     pub(crate) phantom: PhantomData<T>,
 }
 
-pub(crate) trait ConnectionTraitT<T>: Send + Sync {
+pub(crate) trait GenericConnection<T>: Send + Sync {
     fn send_impl(&self, msg: T);
 }
 
-impl<T: Send + Sync, M: InboundMessageNew<T>> ConnectionTraitT<T> for OutboundConnection<T, M> {
+impl<T: Send + Sync, M: InboundMessageNew<T>> GenericConnection<T> for OutboundConnection<T, M> {
     fn send_impl(&self, msg: T) {
-        let msg = M::new(self.inbound_name.clone(), msg);
+        let msg = M::new(self.inbound_channel.clone(), msg);
         let c = self.sender.clone();
         let handler = tokio::spawn(async move {
             match c.send(msg).await {
@@ -119,7 +119,7 @@ impl<T: Send + Sync, M: InboundMessageNew<T>> ConnectionTraitT<T> for OutboundCo
     }
 }
 
-type ConnectionRegister<T> = Vec<Arc<dyn ConnectionTraitT<T> + Send + Sync>>;
+type ConnectionRegister<T> = Vec<Arc<dyn GenericConnection<T> + Send + Sync>>;
 
 pub(crate) struct ConnectionConfig<T> {
     pub connection_register: ConnectionRegister<T>,
@@ -164,7 +164,7 @@ impl<T: Default + Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnu
         Self::Config(ConnectionConfig::new())
     }
 
-    pub fn push(&mut self, connection: Arc<dyn ConnectionTraitT<T> + Send + Sync>) {
+    pub fn push(&mut self, connection: Arc<dyn GenericConnection<T> + Send + Sync>) {
         match self {
             Self::Config(config) => {
                 config.connection_register.push(connection);

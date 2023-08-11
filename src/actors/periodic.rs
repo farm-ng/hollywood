@@ -4,26 +4,29 @@ use async_trait::async_trait;
 
 use crate::compute::context::Context;
 use crate::core::{
-    actor::{DynActiveActor, DynActor, DynDormantActor, GenericActor},
-    inbound::{NullInbounds, NullMessage, ForwardMessage},
-    outbound::{ConnectionEnum, OutboundDistributionTrait, Morph, OutboundChannel},
-    runner::RunnerTrait,
-    state::StateTrait,
+    actor::{ActorFacade, ActorNode, DormantActorNode, GenericActor},
+    inbound::{ForwardMessage, NullInbound, NullMessage},
+    outbound::{ConnectionEnum, Morph, OutboundChannel, OutboundHub},
+    runner::Runner,
+    value::Value,
 };
 
 /// A periodic actor.
 ///
 /// This is an actor that periodically sends a message to its outbound.
-pub type PeriodicActor =
-    GenericActor<NullInbounds, PeriodicActorState, PeriodicActorOutbounds, PeriodicRunner>;
+pub type Periodic =
+    GenericActor<PeriodicProp, NullInbound, PeriodicState, PeriodicOutbound, PeriodicRunner>;
 
-impl PeriodicActor {
+impl Periodic {
     /// Create a new periodic actor, with a period of `period` seconds.
-    pub fn new_with_period(context: &mut Context, period: f64) -> PeriodicActor {
-        PeriodicActor::new_with_state(
+    pub fn new_with_period(context: &mut Context, period: f64) -> Periodic {
+        Periodic::new_with_state(
             context,
-            PeriodicActorState {
+            PeriodicProp {
                 period,
+                ..Default::default()
+            },
+            PeriodicState {
                 count: 0,
                 time_elapsed: 0.0,
             },
@@ -32,61 +35,79 @@ impl PeriodicActor {
 }
 
 impl
-    DynActor<
-        NullInbounds,
-        PeriodicActorState,
-        PeriodicActorOutbounds,
-        NullMessage<PeriodicActorState, PeriodicActorOutbounds>,
+    ActorFacade<
+        PeriodicProp,
+        NullInbound,
+        PeriodicState,
+        PeriodicOutbound,
+        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
         PeriodicRunner,
-    > for PeriodicActor
+    > for Periodic
 {
-    fn name_hint() -> String {
-        "PeriodicActor".to_owned()
+    fn name_hint(_prop: &PeriodicProp) -> String {
+        "Periodic".to_owned()
     }
 }
 
-/// State for a periodic actor.
+/// Configuration properties for the periodic actor.
 #[derive(Clone, Debug)]
-pub struct PeriodicActorState {
+pub struct PeriodicProp {
     period: f64,
+    stop_time: f64,
+}
+
+impl Default for PeriodicProp {
+    fn default() -> Self {
+        Self {
+            period: 1.0,
+            stop_time: 24.0 * 60.0 * 60.0,
+        }
+    }
+}
+
+impl Value for PeriodicProp {}
+
+/// State of the periodic actor.
+#[derive(Clone, Debug)]
+pub struct PeriodicState {
     count: u32,
     time_elapsed: f64,
 }
 
-impl Default for PeriodicActorState {
+impl Default for PeriodicState {
     fn default() -> Self {
         Self {
-            period: 1.0,
             count: 0,
             time_elapsed: 0.0,
         }
     }
 }
 
-impl StateTrait for PeriodicActorState {}
+impl Value for PeriodicState {}
 
-/// OutboundChannel OutboundDistribution center for the periodic actor, which consists of a single outbound channel.
-pub struct PeriodicActorOutbounds {
-    /// Heart beat outbound channel, which sends a messages every `period` seconds.
-    pub heart_beat: OutboundChannel<f64>,
+/// Outbound hub of periodic actor, which consists of a single outbound channel.
+pub struct PeriodicOutbound {
+    /// Time stamp outbound channel, which sends a messages every `period`
+    /// seconds with the current time stamp.
+    pub time_stamp: OutboundChannel<f64>,
 }
 
-impl Morph for PeriodicActorOutbounds {
+impl Morph for PeriodicOutbound {
     fn extract(&mut self) -> Self {
         Self {
-            heart_beat: self.heart_beat.extract(),
+            time_stamp: self.time_stamp.extract(),
         }
     }
 
     fn activate(&mut self) {
-        self.heart_beat.activate();
+        self.time_stamp.activate();
     }
 }
 
-impl OutboundDistributionTrait for PeriodicActorOutbounds {
+impl OutboundHub for PeriodicOutbound {
     fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self {
         Self {
-            heart_beat: OutboundChannel::<f64>::new(context, "heart_beat".to_owned(), actor_name),
+            time_stamp: OutboundChannel::<f64>::new(context, "time_stamp".to_owned(), actor_name),
         }
     }
 }
@@ -95,53 +116,59 @@ impl OutboundDistributionTrait for PeriodicActorOutbounds {
 pub struct PeriodicRunner {}
 
 impl
-    RunnerTrait<
-        NullInbounds,
-        PeriodicActorState,
-        PeriodicActorOutbounds,
-        NullMessage<PeriodicActorState, PeriodicActorOutbounds>,
+    Runner<
+        PeriodicProp,
+        NullInbound,
+        PeriodicState,
+        PeriodicOutbound,
+        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
     > for PeriodicRunner
 {
     /// Create a new dormant actor.
     fn new_dormant_actor(
         name: String,
-        state: PeriodicActorState,
+        prop: PeriodicProp,
+        state: PeriodicState,
         _receiver: tokio::sync::mpsc::Receiver<
-            NullMessage<PeriodicActorState, PeriodicActorOutbounds>,
+            NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
         >,
         _forward: std::collections::HashMap<
             String,
             Box<
                 dyn ForwardMessage<
-                        PeriodicActorState,
-                        PeriodicActorOutbounds,
-                        NullMessage<PeriodicActorState, PeriodicActorOutbounds>,
+                        PeriodicProp,
+                        PeriodicState,
+                        PeriodicOutbound,
+                        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
                     > + Send
                     + Sync,
             >,
         >,
-        outbound: PeriodicActorOutbounds,
-    ) -> Box<dyn DynDormantActor + Send + Sync> {
-        Box::new(DormantPeriodicActor {
+        outbound: PeriodicOutbound,
+    ) -> Box<dyn DormantActorNode + Send + Sync> {
+        Box::new(DormantPeriodic {
             name: name.clone(),
+            prop,
             init_state: state.clone(),
             outbound,
         })
     }
 }
 
-/// A dormant periodic actor.
-pub struct DormantPeriodicActor {
+/// The dormant periodic actor.
+pub struct DormantPeriodic {
     name: String,
-    init_state: PeriodicActorState,
-    outbound: PeriodicActorOutbounds,
+    prop: PeriodicProp,
+    init_state: PeriodicState,
+    outbound: PeriodicOutbound,
 }
 
-impl DynDormantActor for DormantPeriodicActor {
-    fn activate(mut self: Box<Self>) -> Box<dyn DynActiveActor + Send> {
+impl DormantActorNode for DormantPeriodic {
+    fn activate(mut self: Box<Self>) -> Box<dyn ActorNode + Send> {
         self.outbound.activate();
-        Box::new(ActivePeriodicActor {
+        Box::new(ActivePeriodic {
             name: self.name.clone(),
+            prop: self.prop.clone(),
             init_state: self.init_state.clone(),
             state: None,
             outbound: Arc::new(self.outbound),
@@ -149,16 +176,17 @@ impl DynDormantActor for DormantPeriodicActor {
     }
 }
 
-/// An active periodic actor.
-pub struct ActivePeriodicActor {
+/// The active periodic actor.
+pub struct ActivePeriodic {
     name: String,
-    init_state: PeriodicActorState,
-    state: Option<PeriodicActorState>,
-    outbound: Arc<PeriodicActorOutbounds>,
+    prop: PeriodicProp,
+    init_state: PeriodicState,
+    state: Option<PeriodicState>,
+    outbound: Arc<PeriodicOutbound>,
 }
 
 #[async_trait]
-impl DynActiveActor for ActivePeriodicActor {
+impl ActorNode for ActivePeriodic {
     fn name(&self) -> &String {
         &self.name
     }
@@ -173,7 +201,7 @@ impl DynActiveActor for ActivePeriodicActor {
         let state = self.state.as_mut().unwrap();
 
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(
-            (1000.0 * state.period) as u64,
+            (1000.0 * self.prop.period) as u64,
         ));
 
         let conns = Arc::new(self.outbound.clone());
@@ -185,17 +213,16 @@ impl DynActiveActor for ActivePeriodicActor {
             }
             state.count += 1;
 
-            if state.count > 100 {
+            if state.time_elapsed > self.prop.stop_time {
                 break;
             }
             state.time_elapsed += interval.period().as_secs_f64();
-            println!("tick: {:?}, {:?}", state.count, state.time_elapsed);
 
             let conns = conns.clone();
 
-            match &conns.heart_beat.connection_register {
+            match &conns.time_stamp.connection_register {
                 ConnectionEnum::Config(_) => {
-                    panic!("Cannot extract config connection")
+                    panic!("Cannot extract connection config")
                 }
                 ConnectionEnum::Active(active) => {
                     for i in active.maybe_registers.as_ref().unwrap().iter() {

@@ -1,103 +1,78 @@
-use hollywood::actors::PeriodicActor;
+use hollywood::actors::printer::PrinterProp;
+use hollywood::actors::Periodic;
+use hollywood::actors::Printer;
 use hollywood::compute::Context;
-use hollywood::core::{
-    Actor, ActorBuilder, DefaultRunner, DynActor, InboundChannel, InboundMessage,
-    InboundMessageNew, InboundReceptionTrait, NullOutbounds, NullState, OnMessage,
+use hollywood::core::*;
+use hollywood::examples::one_dim_robot::{
+    DrawActor, Filter, NamedFilterState, Robot, Sim, SimState, Stamped,
 };
-use hollywood::examples::one_dim_filter::{FilterActor, FilterState};
-use hollywood::examples::one_dim_robot::{Robot, RobotHeading};
-use hollywood::examples::one_dim_sim::{SimActor, SimState, Stamped};
-
-use hollywood::macros::prelude::*;
-
-use std::fmt::Debug;
-
-#[derive(Clone, Debug)]
-#[actor_inputs(PrintInbounds,{NullState, NullOutbounds})]
-pub enum PrintInboundMessage {
-    RobotState(Stamped<Robot>),
-    RobotBelieve((String, FilterState)),
-}
-
-impl OnMessage for PrintInboundMessage {
-    fn on_message(&self, _state: &mut Self::State, _outputs: &Self::OutboundDistribution) {
-        match self {
-            PrintInboundMessage::RobotState(robot) => {
-                println!("true robot {:?} at {}", robot.value, robot.time);
-            }
-            PrintInboundMessage::RobotBelieve(robot) => {
-                println!("{} robot out {:?}", robot.0, robot.1);
-            }
-        }
-    }
-}
-
-impl InboundMessageNew<Stamped<Robot>> for PrintInboundMessage {
-    fn new(_inbound_name: String, msg: Stamped<Robot>) -> Self {
-        PrintInboundMessage::RobotState(msg)
-    }
-}
-
-impl InboundMessageNew<(String, FilterState)> for PrintInboundMessage {
-    fn new(inbound_name: String, msg: (String, FilterState)) -> Self {
-        match inbound_name.as_str() {
-            "RobotBelieve" => PrintInboundMessage::RobotBelieve(msg),
-            _ => panic!("unexpected inbound name"),
-        }
-    }
-}
-
-#[actor(PrintInboundMessage)]
-type PrintActor = Actor<PrintInbounds, NullState, NullOutbounds>;
 
 async fn run_robot_example() {
     let pipeline = Context::configure(&mut |context| {
-        let mut timer = PeriodicActor::new_with_period(context, 0.25);
-        let mut sim = SimActor::new_with_state(
+        let mut timer = Periodic::new_with_period(context, 0.25);
+        let mut sim = Sim::new_with_state(
             context,
+            NullProp {},
             SimState {
+                shutdown_time: 10.0,
                 time: 0.0,
                 true_robot: Robot {
-                    heading: RobotHeading::East,
-                    position: 0.0,
+                    position: -2.0,
                     velocity: 0.4,
-                    acceleration: 0.0,
                 },
             },
         );
-        let mut filter = FilterActor::new_default_init_state(context);
-        let mut printer = PrintActor::new_default_init_state(context);
+        let mut filter = Filter::new_default_init_state(context, NullProp {});
+        let mut filter_state_printer = Printer::<NamedFilterState>::new_default_init_state(
+            context,
+            PrinterProp {
+                topic: "filter state".to_owned(),
+            },
+        );
+        let mut truth_printer = Printer::<Stamped<Robot>>::new_default_init_state(
+            context,
+            PrinterProp {
+                topic: "truth".to_owned(),
+            },
+        );
+
+        let mut draw_actor = DrawActor::new_default_init_state(context, NullProp {});
 
         timer
             .outbound
-            .heart_beat
-            .connect(context, &mut sim.inbound.heart_beat);
+            .time_stamp
+            .connect(context, &mut sim.inbound.time_stamp);
 
         sim.outbound
-            .true_velocity
+            .noisy_velocity
             .connect(context, &mut filter.inbound.noisy_velocity);
         sim.outbound
             .noisy_range
             .connect(context, &mut filter.inbound.noisy_range);
-
+        sim.outbound
+            .true_robot
+            .connect(context, &mut draw_actor.inbound.true_pos);
+        sim.outbound
+            .true_range
+            .connect(context, &mut draw_actor.inbound.true_range);
+        sim.outbound
+            .true_robot
+            .connect(context, &mut truth_printer.inbound.printable);
         context.register_cancel_requester(&mut sim.outbound.cancel_request);
 
         filter
             .outbound
-            .predicted_state
-            .connect(context, &mut printer.inbound.robot_believe);
+            .updated_state
+            .connect(context, &mut filter_state_printer.inbound.printable);
         filter
             .outbound
             .updated_state
-            .connect(context, &mut printer.inbound.robot_believe);
-        sim.outbound
-            .true_robot
-            .connect(context, &mut printer.inbound.robot_state);
+            .connect(context, &mut draw_actor.inbound.filter_est);
     });
 
-    let pipeline = pipeline.run().await;
-    //println!("done");
-    pipeline.run().await;
+    pipeline.print_flow_graph();
+
+    let _pipeline = pipeline.run().await;
 }
 
 fn main() {

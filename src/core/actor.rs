@@ -5,104 +5,139 @@ use tokio::select;
 use crate::compute::context::Context;
 use crate::core::{
     actor_builder::ActorBuilder,
-    inbound::{ForwardMessage, InboundMessage, InboundReceptionTrait},
-    outbound::OutboundDistributionTrait,
-    runner::{DefaultRunner, RunnerTrait},
-    state::StateTrait,
+    inbound::{ForwardMessage, InboundHub, InboundMessage},
+    outbound::OutboundHub,
+    runner::{DefaultRunner, Runner},
+    value::Value,
 };
 
 /// A generic actor in the hollywood compute graph framework.
 ///
-/// An actor  consists of it's unique name, a set of inbound channels called `InboundReception`, a set of
-/// outbound channels called `OutboundDistribution`, and  it's `State`.
-pub struct GenericActor<
-    InboundReception,
-    State,
-    OutboundDistribution: OutboundDistributionTrait,
-    Runner,
-> {
-    /// unique name of the actor
+/// An actor consists of its unique name, a set of inbound channels, a set of
+/// outbound channels as well as its properties, state and runner types.
+///
+/// The generic actor struct is merely a user-facing facade to configure network connections. Actual
+/// properties, state and inbound routing is stored in the [DormantActorNode] and [ActorNode]
+/// structs.
+pub struct GenericActor<Prop, Inbound, State, Outbound: OutboundHub, Run> {
+    /// unique identifier of the actor
     pub actor_name: String,
     /// a collection of inbound channels
-    pub inbound: InboundReception,
+    pub inbound: Inbound,
     /// a collection of outbound channels
-    pub outbound: OutboundDistribution,
-    pub(crate) phantom: std::marker::PhantomData<(State, Runner)>,
+    pub outbound: Outbound,
+    pub(crate) phantom: std::marker::PhantomData<(Prop, State, Run)>,
 }
 
-/// An actor with the default runner, but otherwise generic over it's inbound reception, state and
-/// outbound OutboundDistribution.
-pub type Actor<InboundReception, State, OutboundDistribution> = GenericActor<
-    InboundReception,
+/// An actor of the default runner type, but otherwise generic over its, prop, state, inbound
+/// and outbound channel types.
+pub type Actor<Prop, Inbound, State, OutboundHub> = GenericActor<
+    Prop,
+    Inbound,
     State,
-    OutboundDistribution,
-    DefaultRunner<InboundReception, State, OutboundDistribution>,
+    OutboundHub,
+    DefaultRunner<Prop, Inbound, State, OutboundHub>,
 >;
 
-/// An actor.
-pub trait DynActor<
-    InboundReception: InboundReceptionTrait<State, OutboundDistribution, M>,
-    State: StateTrait,
-    OutboundDistribution: OutboundDistributionTrait,
+/// The actor facade trait is used to configure the actor's channel connections.
+pub trait ActorFacade<
+    Prop,
+    Inbound: InboundHub<Prop, State, Outbound, M>,
+    State: Value,
+    Outbound: OutboundHub,
     M: InboundMessage,
-    Runner: RunnerTrait<InboundReception, State, OutboundDistribution, M>,
+    Run: Runner<Prop, Inbound, State, Outbound, M>,
 >
 {
-    /// Produces a hint for the name of the actor. Typically the hint is mangled with an id to
-    /// produce a unique name, if multiple actors of the same type are created.
-    fn name_hint() -> String;
+    /// Produces a hint for the actor. The name_hint is used as a base to
+    /// generate a unique name.
+    fn name_hint(prop: &Prop) -> String;
 
     /// Produces a new actor with default state.
+    ///
+    /// Also, a dormant actor node is created added to the context.
     fn new_default_init_state(
         context: &mut Context,
-    ) -> GenericActor<InboundReception, State, OutboundDistribution, Runner> {
-        Self::new_with_state(context, State::default())
+        prop: Prop,
+    ) -> GenericActor<Prop, Inbound, State, Outbound, Run> {
+        Self::new_with_state(context, prop, State::default())
     }
 
     /// Produces a new actor with the given state.
+    ///
+    /// Also, a dormant actor node is created added to the context.
     fn new_with_state(
         context: &mut Context,
+        prop: Prop,
         initial_state: State,
-    ) -> GenericActor<InboundReception, State, OutboundDistribution, Runner> {
-        let actor_name = context.add_new_unique_name(Self::name_hint().to_string());
-        let out = OutboundDistribution::from_context_and_parent(context, &actor_name);
+    ) -> GenericActor<Prop, Inbound, State, Outbound, Run> {
+        let actor_name = context.add_new_unique_name(Self::name_hint(&prop).to_string());
+        let out = Outbound::from_context_and_parent(context, &actor_name);
 
-        let mut builder = ActorBuilder::new(context, &actor_name, initial_state);
+        let mut builder = ActorBuilder::new(context, &actor_name, prop, initial_state);
 
-        let inbound = InboundReception::from_builder(&mut builder, &actor_name);
-        builder.build::<InboundReception, Runner>(inbound, out)
+        let inbound = Inbound::from_builder(&mut builder, &actor_name);
+        builder.build::<Inbound, Run>(inbound, out)
     }
 }
 
-/// Active actors of a compute graph with runtime state type, inbound and outbound channels.
+/// A dormant actor of the pipeline.
 #[async_trait]
-pub trait DynActiveActor {
-    /// Get the name of the actor.
+pub trait DormantActorNode {
+    /// An active actor is returned leaving a shell behind.
+    ///
+    /// Repeated calls to this method may and will often lead to a panic. This method is not
+    /// intended to be called directly. It is called by the Pipeline::from_context() construction 
+    /// method.
+    fn activate(self: Box<Self>) -> Box<dyn ActorNode + Send>;
+}
+
+/// Active actor node of the pipeline. It is created by the [DormantActorNode::activate()] method.
+#[async_trait]
+pub trait ActorNode {
+    /// Return the actor's name.
     fn name(&self) -> &String;
-    /// Reset the actor to its initial state.
+
+    /// Resets the actor to its initial state.
     fn reset(&mut self);
-    /// Run the actor.
+
+    /// Run the actor as a node within the compute pipeline:
+    ///
+    ///   * For each inbound channel there are zero, one or more incoming connections. Messages on 
+    ///     these incoming streams are merged into a single stream.
+    ///   * Messages for all inbound channels are processed sequentially using the 
+    ///     [OnMessage::on_message()](crate::core::OnMessage::on_message()) method. Sequential 
+    ///     processing is crucial to ensure that the actor's state is updated in a consistent 
+    ///     manner. Sequential mutable access to the state is enforced by the borrow checker at 
+    ///     compile time.
+    ///   * Outbound messages are produced by 
+    ///     [OnMessage::on_message()](crate::core::OnMessage::on_message()) the method and sent to 
+    ///     the through the corresponding outbound channel to downstream actors.
+    ///
+    /// Note: It is an async function which returns a future a completion handler. This method is
+    /// not intended to be called directly but is called by the runtime of the pipeline.
     async fn run(&mut self, kill: tokio::sync::broadcast::Receiver<()>);
 }
 
-pub(crate) struct ActiveActor<State, OutboundDistribution, M> {
+pub(crate) struct ActorNodeImpl<Prop, State, OutboundHub, M> {
     pub(crate) name: String,
+    pub(crate) prop: Prop,
     pub(crate) init_state: State,
     pub(crate) state: Option<State>,
     pub(crate) receiver: Option<tokio::sync::mpsc::Receiver<M>>,
-    pub(crate) outbound: Arc<OutboundDistribution>,
+    pub(crate) outbound: Arc<OutboundHub>,
     pub(crate) forward:
-        HashMap<String, Box<dyn ForwardMessage<State, OutboundDistribution, M> + Send + Sync>>,
+        HashMap<String, Box<dyn ForwardMessage<Prop, State, OutboundHub, M> + Send + Sync>>,
 }
 
-impl<State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: InboundMessage>
-    ActiveActor<State, OutboundDistribution, M>
+impl<Prop, State: Value, Outbound: OutboundHub, M: InboundMessage>
+    ActorNodeImpl<Prop, State, Outbound, M>
 {
 }
 
 #[async_trait]
-impl<State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: InboundMessage>
-    DynActiveActor for ActiveActor<State, OutboundDistribution, M>
+impl<Prop: Value, State: Value, Outbound: OutboundHub, M: InboundMessage> ActorNode
+    for ActorNodeImpl<Prop, State, Outbound, M>
 {
     fn name(&self) -> &String {
         &self.name
@@ -117,6 +152,7 @@ impl<State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: Inbo
         let (state, recv) = on_message(
             self.name.clone(),
             self.receiver.take().unwrap(),
+            &self.prop,
             new_state,
             &self.forward,
             self.outbound.clone(),
@@ -129,30 +165,25 @@ impl<State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: Inbo
     }
 }
 
-/// A dynamic dormant actor with runtime state type, inbound and outbound channels.
-#[async_trait]
-pub trait DynDormantActor {
-    /// Activate the actor. An active actor is returned.
-    fn activate(self: Box<Self>) -> Box<dyn DynActiveActor + Send>;
-}
-
-pub(crate) struct DormantActor<State, OutboundDistribution, M> {
+pub(crate) struct DormantActorImpl<Prop: Value, State, OutboundHub, M> {
     pub(crate) name: String,
+    pub(crate) prop: Prop,
     pub(crate) receiver: tokio::sync::mpsc::Receiver<M>,
-    pub(crate) outbound: OutboundDistribution,
+    pub(crate) outbound: OutboundHub,
     pub(crate) forward:
-        HashMap<String, Box<dyn ForwardMessage<State, OutboundDistribution, M> + Send + Sync>>,
+        HashMap<String, Box<dyn ForwardMessage<Prop, State, OutboundHub, M> + Send + Sync>>,
     pub(crate) init_state: State,
 }
 
-impl<State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: InboundMessage>
-    DynDormantActor for DormantActor<State, OutboundDistribution, M>
+impl<Prop: Value, State: Value, Outbound: OutboundHub, M: InboundMessage> DormantActorNode
+    for DormantActorImpl<Prop, State, Outbound, M>
 {
-    fn activate(mut self: Box<Self>) -> Box<dyn DynActiveActor + Send> {
+    fn activate(mut self: Box<Self>) -> Box<dyn ActorNode + Send> {
         self.outbound.activate();
 
-        Box::new(ActiveActor::<State, OutboundDistribution, M> {
+        Box::new(ActorNodeImpl::<Prop, State, Outbound, M> {
             name: self.name.clone(),
+            prop: self.prop.clone(),
             state: None,
             init_state: self.init_state.clone(),
             receiver: Some(self.receiver),
@@ -162,20 +193,18 @@ impl<State: StateTrait, OutboundDistribution: OutboundDistributionTrait, M: Inbo
     }
 }
 
-
 pub(crate) async fn on_message<
-    State: StateTrait,
-    OutboundDistribution: Sync + Send,
+    Prop: Value,
+    State: Value,
+    Outbound: Sync + Send,
     M: InboundMessage,
 >(
     _actor_name: String,
     mut receiver: tokio::sync::mpsc::Receiver<M>,
+    prop: &Prop,
     mut state: State,
-    forward: &HashMap<
-        String,
-        Box<dyn ForwardMessage<State, OutboundDistribution, M> + Send + Sync>,
-    >,
-    outbound: Arc<OutboundDistribution>,
+    forward: &HashMap<String, Box<dyn ForwardMessage<Prop, State, Outbound, M> + Send + Sync>>,
+    outbound: Arc<Outbound>,
     mut kill: tokio::sync::broadcast::Receiver<()>,
 ) -> (State, tokio::sync::mpsc::Receiver<M>) {
     let outbound = outbound.clone();
@@ -193,11 +222,11 @@ pub(crate) async fn on_message<
                     return (state, receiver);
                 }
                 let m = m.unwrap();
-                let t = forward.get(&m.inbound_name());
+                let t = forward.get(&m.inbound_channel());
                 if t.is_none() {
                     continue;
                 }
-                t.unwrap().forward_message(&mut state, &outbound, m);
+                t.unwrap().forward_message(prop, &mut state, &outbound, m);
             }
         }
     }

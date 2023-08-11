@@ -1,15 +1,16 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::compute::{CancelRequest, ComputeGraph, Topology};
-use crate::core::{DynDormantActor, InboundMessage, OutboundConnection, InboundChannel, OutboundChannel};
+use crate::compute::{CancelRequest, Pipeline, Topology};
+use crate::core::{
+    DormantActorNode, InboundChannel, InboundMessage, OutboundChannel, OutboundConnection,
+};
 
-/// The context of the compute graph.
+/// The context of the compute graph which is used to configure the network topology.
 ///
-/// It is an opaque type created by the Context::configure() method, which is the main entry point 
-/// to configure the compute graph.
+/// It is an opaque type created by the Context::configure() method.
 pub struct Context {
-    pub(crate) actors: Vec<Box<dyn DynDormantActor + Send>>,
+    pub(crate) actors: Vec<Box<dyn DormantActorNode + Send>>,
     pub(crate) topology: Topology,
     pub(crate) cancel_request_request_inbound: InboundChannel<bool, CancelRequest>,
     pub(crate) cancel_request_receiver: tokio::sync::mpsc::Receiver<CancelRequest>,
@@ -22,19 +23,22 @@ impl Context {
     ///
     /// This is the main entry point to configure the compute graph. The network topology is defined
     /// by the user within the callback function.
-    pub fn configure(callback: &mut dyn FnMut(&mut Context)) -> ComputeGraph {
+    pub fn configure(callback: &mut dyn FnMut(&mut Context)) -> Pipeline {
         let mut context = Context::new();
         callback(&mut context);
-        ComputeGraph::from_context(context)
+        Pipeline::from_context(context)
     }
 
-    /// Registering an outbound to request to terminate current compute graph execution.
+    /// Registers an outbound channel for cancel request.
+    ///
+    /// Upon receiving a cancel request the registered outbound channel, the execution of the
+    /// pipeline will be stopped.
     pub fn register_cancel_requester(&mut self, outbound: &mut OutboundChannel<()>) {
         outbound
             .connection_register
             .push(Arc::new(OutboundConnection {
                 sender: self.cancel_request_request_inbound.sender.clone(),
-                inbound_name: self.cancel_request_request_inbound.name.clone(),
+                inbound_channel: self.cancel_request_request_inbound.name.clone(),
                 phantom: PhantomData {},
             }));
     }
@@ -45,7 +49,7 @@ impl Context {
             actors: vec![],
             topology: Topology::new(),
             cancel_request_request_inbound: InboundChannel::<bool, CancelRequest> {
-                name: CancelRequest::CANCEL_REQUEST_NAME.to_owned(),
+                name: CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL .to_owned(),
                 actor_name: Self::CONTEXT_NAME.to_owned(),
                 sender: exit_request_sender,
                 phantom: std::marker::PhantomData {},
@@ -84,7 +88,6 @@ impl Context {
         outbound: &mut OutboundChannel<T>,
         inbound: &mut InboundChannel<T, M>,
     ) {
-        self.topology
-            .connect(&outbound.actor_name, &inbound.actor_name);
+        self.topology.connect(outbound, inbound);
     }
 }
