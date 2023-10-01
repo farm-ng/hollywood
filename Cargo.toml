@@ -19,15 +19,15 @@ version = "0.2.1"
 # executor feature needed
 tokio = { version = "1.28.0", features = ["full"] }
 tokio-stream = "0.1.14"
-enum-map = "2.5.0"
+enum-map = "3.0.0-0.gat.0"
 async-trait = "0.1.51"
 rand = "0.8.4"
 petgraph = "0.6.3"
 uuid = { version = "1.3.3", features = ["v4"] }
 strum_macros = "0.25"
 strum = { version = "0.25", features = ["derive"] }
-hollywood_macros = { version = "0.1.0", path = "hollywood_macros" }
+hollywood_macros = { version = "0.2.1", path = "hollywood_macros" }
 rand_distr = "0.4.3"
 nalgebra = "0.32.2"
-grid = "0.10.0"
+grid = "0.11.0"
 drawille = "0.3.0"
