@@ -20,10 +20,10 @@ pub struct ActorBuilder<'a, Prop, State: Value, OutboundHub, M: InboundMessage> 
     /// execution context
     pub  context: &'a mut Context,
     /// a channel for sending messages to the actor
-    pub(crate) sender: tokio::sync::mpsc::Sender<M>,
+    pub sender: tokio::sync::mpsc::Sender<M>,
     pub(crate) receiver: tokio::sync::mpsc::Receiver<M>,
     /// a collection of inbound channels
-    pub(crate) forward:
+    pub forward:
         HashMap<String, Box<dyn ForwardMessage<Prop, State, OutboundHub, M> + Send + Sync>>,
 }
 
