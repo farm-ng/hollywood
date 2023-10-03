@@ -1,17 +1,18 @@
 use hollywood::actors::printer::PrinterProp;
 use hollywood::actors::{Periodic, Printer};
 use hollywood::compute::Context;
-use hollywood::core::ActorFacade;
+use hollywood::core::*;
 
 ///
 pub async fn run_tick_print_example() {
     let pipeline = Context::configure(&mut |context| {
         let mut timer = Periodic::new_with_period(context, 1.0);
-        let mut time_printer = Printer::<f64>::new_default_init_state(
+        let mut time_printer = Printer::<f64>::from_prop_and_state(
             context,
             PrinterProp {
                 topic: "time".to_string(),
             },
+            NullState::default(),
         );
         timer
             .outbound

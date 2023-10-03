@@ -1,5 +1,5 @@
 /// Trait for actor state and props.
-pub trait Value: Default + std::fmt::Debug + Send + Sync + Clone + 'static {}
+pub trait Value: std::fmt::Debug + Send + Sync + Clone + 'static {}
 
 
 /// Empty state - for stateless actors.

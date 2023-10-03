@@ -12,7 +12,8 @@ pub trait OutboundHub: Send + Sync + 'static + Morph {
 
 /// An empty outbound hub - used for actors that do not have any outbound channels.
 #[derive(Debug, Clone)]
-pub struct NullOutbound {}
+pub struct NullOutbound {
+}
 
 impl Morph for NullOutbound {
     fn extract(&mut self) -> Self {
@@ -191,6 +192,8 @@ impl<T: Default + Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnu
 
 impl<T> Morph for ConnectionEnum<T> {
     fn extract(&mut self) -> Self {
+
+        println!("ConnectionEnum::extract");
         match self {
             Self::Config(config) => Self::Active(ActiveConnection {
                 maybe_registers: None,
@@ -203,6 +206,7 @@ impl<T> Morph for ConnectionEnum<T> {
     }
 
     fn activate(&mut self) {
+        println!("ConnectionEnum::activate");
         match self {
             Self::Config(_) => {
                 panic!("Cannot activate config connection");

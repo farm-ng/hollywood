@@ -4,12 +4,23 @@ use async_trait::async_trait;
 
 use crate::compute::context::Context;
 use crate::core::{
-    actor::{ActorFacade, ActorNode, DormantActorNode, GenericActor},
+    actor::{FromPropState, ActorNode, DormantActorNode, GenericActor},
     inbound::{ForwardMessage, NullInbound, NullMessage},
     outbound::{ConnectionEnum, Morph, OutboundChannel, OutboundHub},
     runner::Runner,
     value::Value,
 };
+use crate::macros::*;
+
+
+/// Outbound hub of periodic actor, which consists of a single outbound channel.
+#[actor_outputs]
+pub struct PeriodicOutbound {
+     /// Time stamp outbound channel, which sends a messages every `period`
+    /// seconds with the current time stamp.
+    pub time_stamp: OutboundChannel<f64>,
+}
+
 
 /// A periodic actor.
 ///
@@ -20,7 +31,7 @@ pub type Periodic =
 impl Periodic {
     /// Create a new periodic actor, with a period of `period` seconds.
     pub fn new_with_period(context: &mut Context, period: f64) -> Periodic {
-        Periodic::new_with_state(
+        Periodic::from_prop_and_state(
             context,
             PeriodicProp {
                 period,
@@ -35,7 +46,7 @@ impl Periodic {
 }
 
 impl
-    ActorFacade<
+    FromPropState<
         PeriodicProp,
         NullInbound,
         PeriodicState,
@@ -85,32 +96,7 @@ impl Default for PeriodicState {
 
 impl Value for PeriodicState {}
 
-/// Outbound hub of periodic actor, which consists of a single outbound channel.
-pub struct PeriodicOutbound {
-    /// Time stamp outbound channel, which sends a messages every `period`
-    /// seconds with the current time stamp.
-    pub time_stamp: OutboundChannel<f64>,
-}
 
-impl Morph for PeriodicOutbound {
-    fn extract(&mut self) -> Self {
-        Self {
-            time_stamp: self.time_stamp.extract(),
-        }
-    }
-
-    fn activate(&mut self) {
-        self.time_stamp.activate();
-    }
-}
-
-impl OutboundHub for PeriodicOutbound {
-    fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self {
-        Self {
-            time_stamp: OutboundChannel::<f64>::new(context, "time_stamp".to_owned(), actor_name),
-        }
-    }
-}
 
 /// The custom runner for the periodic actor.
 pub struct PeriodicRunner {}

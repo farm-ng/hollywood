@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
 use crate::core::{
-    Actor, ActorBuilder, DefaultRunner, ActorFacade, InboundChannel, InboundHub, InboundMessage,
+    Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub, InboundMessage,
     InboundMessageNew, NullOutbound, NullState, OnMessage, Value,
 };
 
@@ -51,7 +51,7 @@ impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessageNew<T>
 pub type Printer<T> = Actor<PrinterProp, PrinterInbound<T>, NullState, NullOutbound>;
 
 impl<T: Clone + Sync + Send + 'static + Debug + Display + Default>
-    ActorFacade<
+    FromPropState<
         PrinterProp,
         PrinterInbound<T>,
         NullState,
