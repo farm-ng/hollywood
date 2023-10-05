@@ -3,7 +3,7 @@
 
 /// Actor
 pub mod actor;
-pub use actor::{Actor, ActorFacade};
+pub use actor::{Actor, FromPropState};
 pub(crate) use actor::{ActorNode, DormantActorNode};
 
 /// Actor builder

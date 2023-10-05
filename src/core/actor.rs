@@ -39,8 +39,8 @@ pub type Actor<Prop, Inbound, State, OutboundHub> = GenericActor<
     DefaultRunner<Prop, Inbound, State, OutboundHub>,
 >;
 
-/// The actor facade trait is used to configure the actor's channel connections.
-pub trait ActorFacade<
+/// New actor from properties and state.
+pub trait FromPropState<
     Prop,
     Inbound: InboundHub<Prop, State, Outbound, M>,
     State: Value,
@@ -53,20 +53,10 @@ pub trait ActorFacade<
     /// generate a unique name.
     fn name_hint(prop: &Prop) -> String;
 
-    /// Produces a new actor with default state.
-    ///
-    /// Also, a dormant actor node is created added to the context.
-    fn new_default_init_state(
-        context: &mut Context,
-        prop: Prop,
-    ) -> GenericActor<Prop, Inbound, State, Outbound, Run> {
-        Self::new_with_state(context, prop, State::default())
-    }
-
     /// Produces a new actor with the given state.
     ///
     /// Also, a dormant actor node is created added to the context.
-    fn new_with_state(
+    fn from_prop_and_state(
         context: &mut Context,
         prop: Prop,
         initial_state: State,

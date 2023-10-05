@@ -12,13 +12,11 @@ use crate::core::{
 pub struct Context {
     pub(crate) actors: Vec<Box<dyn DormantActorNode + Send>>,
     pub(crate) topology: Topology,
-    pub(crate) cancel_request_request_inbound: InboundChannel<bool, CancelRequest>,
+    pub(crate) cancel_request_sender_template: tokio::sync::mpsc::Sender<CancelRequest>,
     pub(crate) cancel_request_receiver: tokio::sync::mpsc::Receiver<CancelRequest>,
 }
 
 impl Context {
-    const CONTEXT_NAME: &str = "CONTEXT";
-
     /// Create a new context.
     ///
     /// This is the main entry point to configure the compute graph. The network topology is defined
@@ -33,27 +31,32 @@ impl Context {
     ///
     /// Upon receiving a cancel request the registered outbound channel, the execution of the
     /// pipeline will be stopped.
+    pub fn get_cancel_request_sender(&mut self) -> tokio::sync::mpsc::Sender<CancelRequest> {
+        self.cancel_request_sender_template.clone()
+    }
+
+       /// Registers an outbound channel for cancel request.
+    ///
+    /// Upon receiving a cancel request the registered outbound channel, the execution of the
+    /// pipeline will be stopped.
     pub fn register_cancel_requester(&mut self, outbound: &mut OutboundChannel<()>) {
         outbound
             .connection_register
             .push(Arc::new(OutboundConnection {
-                sender: self.cancel_request_request_inbound.sender.clone(),
-                inbound_channel: self.cancel_request_request_inbound.name.clone(),
+                sender: self.cancel_request_sender_template.clone(),
+                inbound_channel: "CANCEL".to_string(),
                 phantom: PhantomData {},
             }));
     }
 
+
     fn new() -> Self {
-        let (exit_request_sender, cancel_request_receiver) = tokio::sync::mpsc::channel(1);
+        let (cancel_request_sender_template, cancel_request_receiver) =
+            tokio::sync::mpsc::channel(1);
         Self {
             actors: vec![],
             topology: Topology::new(),
-            cancel_request_request_inbound: InboundChannel::<bool, CancelRequest> {
-                name: CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL .to_owned(),
-                actor_name: Self::CONTEXT_NAME.to_owned(),
-                sender: exit_request_sender,
-                phantom: std::marker::PhantomData {},
-            },
+            cancel_request_sender_template,
             cancel_request_receiver,
         }
     }

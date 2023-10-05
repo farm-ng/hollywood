@@ -169,7 +169,7 @@
 //! 
 //! ```rust
 //! # use hollywood::actors::{Periodic, Printer, PrinterProp};
-//! # use hollywood::core::ActorFacade;
+//! # use hollywood::core::FromPropState;
 //! # use hollywood::compute::Context;
 //! # use hollywood::examples::moving_average::{MovingAverage, MovingAverageProp};
 //! let pipeline = Context::configure(&mut |context| {
@@ -377,7 +377,7 @@ pub mod macros {
     ///     trait.
     ///
     /// Effect:
-    ///   - This macro implements the [ActorFacade](crate::core::ActorFacade) trait for the ACTOR 
+    ///   - This macro implements the [FromPropState](crate::core::FromPropState) trait for the ACTOR 
     ///     type.
     ///
     /// This is the last of the three macros that need to be used to define a new actor type. The 

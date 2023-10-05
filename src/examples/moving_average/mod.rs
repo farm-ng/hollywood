@@ -11,7 +11,7 @@ pub use crate::core::{
 };
 
 // needed for actor macro
-pub use crate::core::{Actor, DefaultRunner, ActorFacade};
+pub use crate::core::{Actor, DefaultRunner, FromPropState};
 
 /// Outbound hub for the MovingAverage.
 #[actor_outputs]
