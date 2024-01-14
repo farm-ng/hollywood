@@ -15,7 +15,7 @@ pub enum CancelRequest {
 impl CancelRequest {
     /// Unique name for cancel request inbound channel. This special inbound channel is not
     /// associated with any actor but with the pipeline itself.
-    pub const CANCEL_REQUEST_INBOUND_CHANNEL: &str = "CANCEL";
+    pub const CANCEL_REQUEST_INBOUND_CHANNEL: &'static str = "CANCEL";
 }
 
 impl InboundMessage for CancelRequest {

@@ -95,7 +95,7 @@ impl<T: Clone + Debug + Display + Default + Sync + Send + 'static>
     ) -> Self {
         let m = InboundChannel::new(
             builder.context,
-            actor_name.clone(),
+            actor_name,
             &builder.sender,
             PrinterInboundMessage::Printable(T::default()).inbound_channel(),
         );
