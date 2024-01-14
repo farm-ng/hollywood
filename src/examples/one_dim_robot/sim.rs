@@ -4,7 +4,7 @@ use rand_distr::{Distribution, Normal};
 
 use crate::compute::Context;
 use crate::core::{
-    Actor, ActorBuilder, DefaultRunner, ActorFacade, InboundChannel, InboundHub, InboundMessage,
+    Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub, InboundMessage,
     InboundMessageNew, Morph, NullProp, OnMessage, OutboundChannel, OutboundHub, Value,
 };
 use crate::examples::one_dim_robot::{RangeMeasurementModel, Robot, Stamped};

@@ -303,7 +303,7 @@ pub fn actor(attr: TokenStream, item: TokenStream) -> TokenStream {
         #( #attrs )*
         pub type #actor_name = Actor<#prop, #inbound, #state_type, #out>;
 
-        impl ActorFacade<#prop, #inbound, #state_type, #out, #message_type, #runner_type>
+        impl FromPropState<#prop, #inbound, #state_type, #out, #message_type, #runner_type>
             for #actor_name
         {
             fn name_hint(prop: &#prop) -> String {

@@ -15,7 +15,7 @@ pub enum CancelRequest {
 impl CancelRequest {
     /// Unique name for cancel request inbound channel. This special inbound channel is not
     /// associated with any actor but with the pipeline itself.
-    pub const CANCEL_REQUEST_INBOUND_CHANNEL: &str = "CANCEL";
+    pub const CANCEL_REQUEST_INBOUND_CHANNEL: &'static str = "CANCEL";
 }
 
 impl InboundMessage for CancelRequest {
@@ -41,6 +41,8 @@ impl InboundMessageNew<()> for CancelRequest {
 pub struct Pipeline {
     actors: Vec<Box<dyn ActorNode + Send>>,
     topology: Topology,
+    /// We have this here to keep receiver alive
+    pub cancel_request_sender_template: Option<tokio::sync::mpsc::Sender<CancelRequest>>,
     cancel_request_receiver: Option<tokio::sync::mpsc::Receiver<CancelRequest>>,
 }
 
@@ -53,6 +55,7 @@ impl Pipeline {
         let compute_graph = Pipeline {
             actors: active,
             topology: context.topology,
+            cancel_request_sender_template: Some(context.cancel_request_sender_template),
             cancel_request_receiver: Some(context.cancel_request_receiver),
         };
         compute_graph.topology.analyze_graph_topology();
@@ -88,12 +91,17 @@ impl Pipeline {
         let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
 
         let h_exit = tokio::spawn(async move {
-            let msg = cancel_request_receiver.recv().await.unwrap();
-            match msg {
-                CancelRequest::Cancel(_) => {
+            match cancel_request_receiver.recv().await {
+                Some(msg) => {
                     println!("Cancel requested");
-
-                    let _ = exit_tx.send(cancel_request_receiver);
+                    match msg {
+                        CancelRequest::Cancel(_) => {
+                            let _ = exit_tx.send(cancel_request_receiver);
+                        }
+                    }
+                }
+                None => {
+                    println!("Cancel request channel closed");
                 }
             }
         });
@@ -110,7 +118,12 @@ impl Pipeline {
 
             handles.push(h);
         }
-        h_exit.await.unwrap();
+        match h_exit.await {
+            Ok(_) => {}
+            Err(err) => {
+                println!("Error in cancel request handler: {}", err);
+            }
+        }
         kill_sender.send(()).unwrap();
         for h in handles {
             h.await.unwrap();

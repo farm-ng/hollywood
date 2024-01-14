@@ -3,6 +3,8 @@ use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
 use hollywood::compute::Context;
 use hollywood::core::*;
+use hollywood::examples::one_dim_robot::draw::DrawState;
+use hollywood::examples::one_dim_robot::filter::FilterState;
 use hollywood::examples::one_dim_robot::{
     DrawActor, Filter, NamedFilterState, Robot, Sim, SimState, Stamped,
 };
@@ -10,7 +12,7 @@ use hollywood::examples::one_dim_robot::{
 async fn run_robot_example() {
     let pipeline = Context::configure(&mut |context| {
         let mut timer = Periodic::new_with_period(context, 0.25);
-        let mut sim = Sim::new_with_state(
+        let mut sim = Sim::from_prop_and_state(
             context,
             NullProp {},
             SimState {
@@ -22,21 +24,24 @@ async fn run_robot_example() {
                 },
             },
         );
-        let mut filter = Filter::new_default_init_state(context, NullProp {});
-        let mut filter_state_printer = Printer::<NamedFilterState>::new_default_init_state(
+        let mut filter = Filter::from_prop_and_state(context, NullProp {}, FilterState::default());
+        let mut filter_state_printer = Printer::<NamedFilterState>::from_prop_and_state(
             context,
             PrinterProp {
                 topic: "filter state".to_owned(),
             },
+            NullState::default(),
         );
-        let mut truth_printer = Printer::<Stamped<Robot>>::new_default_init_state(
+        let mut truth_printer = Printer::<Stamped<Robot>>::from_prop_and_state(
             context,
             PrinterProp {
                 topic: "truth".to_owned(),
             },
+            NullState::default(),
         );
 
-        let mut draw_actor = DrawActor::new_default_init_state(context, NullProp {});
+        let mut draw_actor =
+            DrawActor::from_prop_and_state(context, NullProp {}, DrawState::default());
 
         timer
             .outbound
