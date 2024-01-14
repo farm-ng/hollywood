@@ -149,7 +149,7 @@ impl Topology {
     }
 
     pub(crate) fn connect<
-        T: Default + Clone + std::fmt::Debug + Sync + Send + 'static,
+        T: Clone + std::fmt::Debug + Sync + Send + 'static,
         M: InboundMessage,
     >(
         &mut self,
@@ -190,10 +190,6 @@ impl Topology {
         let start_nodes = self.start_nodes();
         for node in &start_nodes {
             let node_idx = self.unique_idx_name_pairs.get_node_idx(&node.name).unwrap();
-            for node in self.graph.node_indices() {
-                println!("node: {:?} {:?}", node, self.graph[node]);
-            }
-
             self.graph.remove_node(node_idx).unwrap();
         }
         start_nodes

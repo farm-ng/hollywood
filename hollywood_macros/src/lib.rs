@@ -116,6 +116,7 @@ pub fn actor_inputs(args: TokenStream, inbound: TokenStream) -> TokenStream {
     let prop_type = &args.prop_type;
     let state_type = &args.state_type;
     let output_type = &args.output_type;
+    let request_type = &args.request_type;
 
     let inbound = fields.iter().map(|variant| {
         let variant_name = variant.ident.clone();
@@ -197,6 +198,7 @@ pub fn actor_inputs(args: TokenStream, inbound: TokenStream) -> TokenStream {
             type Prop = #prop_type;
             type State = #state_type;
             type OutboundHub = #output_type;
+            type RequestHub = #request_type;
 
             fn inbound_channel(&self) -> String {
                 match self {
@@ -205,9 +207,9 @@ pub fn actor_inputs(args: TokenStream, inbound: TokenStream) -> TokenStream {
             }
         }
 
-        impl InboundHub<#prop_type, #state_type, #output_type, #name> for #struct_name {
+        impl InboundHub<#prop_type, #state_type, #output_type, #request_type,#name> for #struct_name {
 
-            fn from_builder(builder: &mut ActorBuilder<#prop_type, #state_type, #output_type, #name>,
+            fn from_builder(builder: &mut ActorBuilder<#prop_type, #state_type, #output_type,#request_type, #name>,
                             actor_name: &str) -> Self {
                 #(#from_builder_inbounds)*
 
@@ -258,6 +260,8 @@ pub fn actor(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut maybe_inbounds = None;
     let mut maybe_state = None;
     let mut maybe_outputs = None;
+    let mut maybe_requests = None;
+
     if let Item::Type(item_type) = inbound_clone {
         if let Type::Path(type_path) = *item_type.ty {
             if type_path.path.segments.last().unwrap().ident != "Actor" {
@@ -267,10 +271,10 @@ pub fn actor(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
             for segment in type_path.path.segments {
                 if let PathArguments::AngleBracketed(angle_bracketed_args) = segment.arguments {
-                    if angle_bracketed_args.args.len() != 4 {
+                    if angle_bracketed_args.args.len() != 5 {
                         return Error::new_spanned(
                             &angle_bracketed_args,
-                            "Expected three type arguments: Actor<PROP, INBOUNDS, STATE, OUTBOUNDS>",
+                            "Expected 5 type arguments: Actor<PROP, INBOUNDS, STATE, OUTBOUNDS, REQUESTS>",
                         )
                         .to_compile_error()
                         .into();
@@ -279,6 +283,7 @@ pub fn actor(attr: TokenStream, item: TokenStream) -> TokenStream {
                     maybe_inbounds = Some(angle_bracketed_args.args[1].clone());
                     maybe_state = Some(angle_bracketed_args.args[2].clone());
                     maybe_outputs = Some(angle_bracketed_args.args[3].clone());
+                    maybe_requests = Some(angle_bracketed_args.args[4].clone());
                 }
             }
         } else {
@@ -294,16 +299,17 @@ pub fn actor(attr: TokenStream, item: TokenStream) -> TokenStream {
     let inbound = maybe_inbounds.unwrap();
     let state_type = maybe_state.unwrap();
     let out = maybe_outputs.unwrap();
+    let requests = maybe_requests.unwrap();
 
-    let runner_type = quote! { DefaultRunner<#prop, #inbound, #state_type,  #out> };
+    let runner_type = quote! { DefaultRunner<#prop, #inbound, #state_type,  #out, #requests> };
 
     let gen = quote! {
 
         ///
         #( #attrs )*
-        pub type #actor_name = Actor<#prop, #inbound, #state_type, #out>;
+        pub type #actor_name = Actor<#prop, #inbound, #state_type, #out, #requests>;
 
-        impl FromPropState<#prop, #inbound, #state_type, #out, #message_type, #runner_type>
+        impl FromPropState<#prop, #inbound, #state_type, #out, #message_type, #requests, #runner_type>
             for #actor_name
         {
             fn name_hint(prop: &#prop) -> String {
@@ -320,6 +326,7 @@ struct ActorInbound {
     prop_type: Ident,
     state_type: Ident,
     output_type: Ident,
+    request_type: Ident,
 }
 
 impl Parse for ActorInbound {
@@ -333,11 +340,14 @@ impl Parse for ActorInbound {
         let state_type: Ident = content.parse()?;
         let _: Token![,] = content.parse()?;
         let output_type: Ident = content.parse()?;
+        let _: Token![,] = content.parse()?;
+        let request_type: Ident = content.parse()?;
         Ok(ActorInbound {
             struct_name,
             prop_type,
             state_type,
             output_type,
+            request_type
         })
     }
 }

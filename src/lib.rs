@@ -1,4 +1,3 @@
-#![deny(missing_docs)]
 //! # Hollywood
 //!
 //! Hollywood is an actor framework for Rust.
@@ -37,6 +36,13 @@
 //! - The [compute] module contains the [Context](compute::Context) and
 //!   [Pipeline](compute::Pipeline) which are used to configure a set of actors, connect
 //!   them into a graph and to execute flow.
+//!
+//! - The [actors] module contains a set of predefined actors that can be used as part of a compute
+//!   pipelines.
+//! 
+//! - The [introspect] module contains a some visualization tools to inspect the compute pipeline.
+//!
+//! - The [examples] module contains a set of examples actors that demonstrate how to use the library.
 //!
 //! ## Example: moving average
 //!
@@ -78,16 +84,12 @@
 //!     }
 //! }
 //!
-//! impl Value for MovingAverageProp {}
-//!
 //! /// State of the MovingAverage actor.
 //! #[derive(Clone, Debug, Default)]
 //! pub struct MovingAverageState {
 //!     /// current moving average
 //!     pub moving_average: f64,
 //! }
-//!
-//! impl Value for MovingAverageState {}
 //! ```
 //!
 //! Properties can be understood as the configuration of the actor which are specified when the
@@ -107,8 +109,10 @@
 //! ```ignore
 //! /// Inbound message for the MovingAverage actor.
 //! #[derive(Clone, Debug)]
-//! #[actor_inputs(MovingAverageInbound, {MovingAverageProp, MovingAverageState,
-//!                                        MovingAverageOutbound})]
+//! #[actor_inputs(MovingAverageInbound, {MovingAverageProp,
+//!                                       MovingAverageState,
+//!                                       MovingAverageOutbound,
+//!                                       NullRequest})]
 //! pub enum MovingAverageMessage {
 //!     /// a float value
 //!     Value(f64),
@@ -116,7 +120,12 @@
 //!
 //! impl OnMessage for MovingAverageMessage {
 //!     /// Process the inbound time-stamp message.
-//!     fn on_message(&self, prop: &Self::Prop, state: &mut Self::State, outbound: &Self::Outbound)
+//!     fn on_message(
+//!         &self,
+//!         prop: &Self::Prop,
+//!         state: &mut Self::State,
+//!         outbound: &Self::Outbound,
+//!         _request: &Self::RequestHub)
 //!     {
 //!         match &self {
 //!             MovingAverageMessage::Value(new_value) => {
@@ -149,8 +158,12 @@
 //! /// The MovingAverage actor.
 //! ///
 //! #[actor(MovingAverageMessage)]
-//! type MovingAverage =
-//!     Actor<MovingAverageInbound, MovingAverageOutbound, MovingAverageProp,  MovingAverageState>;
+//! type MovingAverage = Actor<
+//!     MovingAverageProp,
+//!     MovingAverageInbound,
+//!     MovingAverageOutbound,  
+//!     MovingAverageState,
+//!     NullRequest>;
 //! ```
 //!
 //! ### Configure and execute the pipeline
@@ -172,7 +185,7 @@
 //! # use hollywood::core::FromPropState;
 //! # use hollywood::core::value::NullState;
 //! # use hollywood::compute::Context;
-//! # use hollywood::examples::moving_average::{MovingAverage, MovingAverageProp, MovingAverageState};
+//! # use hollywood::example_actors::moving_average::{MovingAverage, MovingAverageProp, MovingAverageState};
 //! let pipeline = Context::configure(&mut |context| {
 //!     let mut timer = Periodic::new_with_period(context, 1.0);
 //!     let mut moving_average = MovingAverage::from_prop_and_state(
@@ -282,7 +295,7 @@ pub mod introspect;
 pub mod actors;
 
 /// Library of actors.
-pub mod examples;
+pub mod example_actors;
 
 /// Convenience macros for hollywood to define new actor types.
 ///
@@ -345,8 +358,7 @@ pub mod macros {
     /// Prerequisite:
     ///   - The OUTBOUND struct is defined and implements [OutboundHub](crate::core::OutboundHub)
     ///     and [Morph](crate::core::Morph), typically using the [macro@actor_outputs] macro.
-    ///   - The PROP and STATE structs are defined and implement the [Value](crate::core::Value)
-    ///     trait.
+    ///   - The PROP and STATE structs are defined.
     ///
     /// Effects:
     ///   - The macro defines the struct INBOUND that contains an inbound channel field for each
@@ -377,8 +389,7 @@ pub mod macros {
     ///     [InboundMessage](crate::core::InboundMessage), as well as the INBOUND
     ///     struct is defined and implements the [InboundHub](crate::core::InboundHub) trait, e.g.
     ///     through the [macro@actor_inputs] macro.
-    ///   - The PROP and STATE structs are defined and implement the [Value](crate::core::Value)
-    ///     trait.
+    ///   - The PROP and STATE structs are defined.
     ///
     /// Effect:
     ///   - This macro implements the [FromPropState](crate::core::FromPropState) trait for the ACTOR

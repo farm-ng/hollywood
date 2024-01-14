@@ -3,14 +3,14 @@ use std::sync::Arc;
 
 use crate::compute::{CancelRequest, Pipeline, Topology};
 use crate::core::{
-    DormantActorNode, InboundChannel, InboundMessage, OutboundChannel, OutboundConnection,
+    InboundChannel, InboundMessage, OutboundChannel, OutboundConnection, ActorNode,
 };
 
 /// The context of the compute graph which is used to configure the network topology.
 ///
 /// It is an opaque type created by the Context::configure() method.
 pub struct Context {
-    pub(crate) actors: Vec<Box<dyn DormantActorNode + Send>>,
+    pub(crate) actors: Vec<Box<dyn ActorNode + Send>>,
     pub(crate) topology: Topology,
     pub(crate) cancel_request_sender_template: tokio::sync::mpsc::Sender<CancelRequest>,
     pub(crate) cancel_request_receiver: tokio::sync::mpsc::Receiver<CancelRequest>,
@@ -84,7 +84,7 @@ impl Context {
     }
 
     pub(crate) fn connect_impl<
-        T: Default + Clone + std::fmt::Debug + Sync + Send + 'static,
+        T: Clone + std::fmt::Debug + Sync + Send + 'static,
         M: InboundMessage,
     >(
         &mut self,
@@ -92,5 +92,5 @@ impl Context {
         inbound: &mut InboundChannel<T, M>,
     ) {
         self.topology.connect(outbound, inbound);
-    }
+    } 
 }

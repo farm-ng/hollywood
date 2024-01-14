@@ -170,14 +170,11 @@ impl FlowGraph {
     }
 
     pub fn add_layer(&mut self, nodes: Vec<ActorNode>) {
-        println!("Adding nodes: {:?}", nodes);
-
         let mut layer = FlowLayer {
             super_nodes: Vec::new(),
         };
 
         for node in nodes {
-            println!("Adding node: {:?}", node);
             let mut super_node = FlowSuperNode {
                 inbound: Vec::new(),
                 actor: node.name.clone(),

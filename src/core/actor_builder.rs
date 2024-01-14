@@ -1,34 +1,42 @@
-use std::collections::HashMap;
+
 
 use crate::compute::context::Context;
 use crate::core::{
     actor::GenericActor,
-    inbound::{ForwardMessage, InboundHub, InboundMessage},
+    inbound::{InboundHub, InboundMessage},
     outbound::OutboundHub,
     runner::Runner,
-    value::Value,
 };
 
+use super::actor::ForwardTable;
+use super::request::RequestHub;
+
 /// Creates actor from its components.
-/// 
+///
 /// Used in  [`InboundHub::from_builder`] public interface.
-pub struct ActorBuilder<'a, Prop, State: Value, OutboundHub, M: InboundMessage> {
+pub struct ActorBuilder<
+    'a,
+    Prop,
+    State,
+    OutboundHub,
+    Request: RequestHub<M>,
+    M: InboundMessage,
+> {
     /// unique identifier of the actor
     pub actor_name: String,
     prop: Prop,
     state: State,
     /// execution context
-    pub  context: &'a mut Context,
+    pub context: &'a mut Context,
     /// a channel for sending messages to the actor
     pub sender: tokio::sync::mpsc::Sender<M>,
     pub(crate) receiver: tokio::sync::mpsc::Receiver<M>,
     /// a collection of inbound channels
-    pub forward:
-        HashMap<String, Box<dyn ForwardMessage<Prop, State, OutboundHub, M> + Send + Sync>>,
+    pub forward: ForwardTable<Prop, State, OutboundHub, Request, M>,
 }
 
-impl<'a, Prop, State: Value, Outbound: OutboundHub, M: InboundMessage>
-    ActorBuilder<'a, Prop, State, Outbound, M>
+impl<'a, Prop, State, Outbound: OutboundHub, Request: RequestHub<M>, M: InboundMessage>
+    ActorBuilder<'a, Prop, State, Outbound, Request, M>
 {
     pub(crate) fn new(
         context: &'a mut Context,
@@ -45,33 +53,35 @@ impl<'a, Prop, State: Value, Outbound: OutboundHub, M: InboundMessage>
             context,
             sender: sender.clone(),
             receiver,
-            forward: HashMap::new(),
+            forward: ForwardTable::new(),
         }
     }
 
     pub(crate) fn build<
-        Inbound: InboundHub<Prop, State, Outbound, M>,
-        Run: Runner<Prop, Inbound, State, Outbound, M>,
+        Inbound: InboundHub<Prop, State, Outbound, Request, M>,
+        Run: Runner<Prop, Inbound, State, Outbound, Request, M>,
     >(
         self,
         inbound: Inbound,
         outbound: Outbound,
-    ) -> GenericActor<Prop, Inbound, State, Outbound, Run> {
+        request: Request,
+    ) -> GenericActor<Prop, Inbound, State, Outbound, Request, Run> {
         let mut actor = GenericActor {
             actor_name: self.actor_name.clone(),
             inbound,
             outbound,
+            request,
             phantom: std::marker::PhantomData {},
         };
-        let sleeping = Run::new_dormant_actor(
+        self.context.actors.push(Run::new_actor_node(
             self.actor_name,
             self.prop,
             self.state,
             self.receiver,
             self.forward,
             actor.outbound.extract(),
-        );
-        self.context.actors.push(sleeping);
+            actor.request.extract(),
+        ));
         actor
     }
 }

@@ -22,6 +22,7 @@ impl InboundMessage for CancelRequest {
     type Prop = NullProp;
     type State = NullState;
     type OutboundHub = NullOutbound;
+    type RequestHub = NullOutbound;
 
     /// This messages is only meant to use for the cancel request inbound channel of the pipeline.
     /// Hence, the inbound name is the constant [CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL].
@@ -50,7 +51,7 @@ impl Pipeline {
     pub(crate) fn from_context(context: Context) -> Self {
         let mut active = vec![];
         for actor in context.actors.into_iter() {
-            active.push(actor.activate());
+            active.push(actor);
         }
         let compute_graph = Pipeline {
             actors: active,

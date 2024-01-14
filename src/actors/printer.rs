@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Display};
 
 use crate::core::{
-    Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub, InboundMessage,
-    InboundMessageNew, NullOutbound, NullState, OnMessage, Value,
+    request::NullRequest, Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel,
+    InboundHub, InboundMessage, InboundMessageNew, NullOutbound, NullState, OnMessage,
 };
 
 /// Configuration properties for the printer actor.
@@ -20,8 +20,6 @@ impl Default for PrinterProp {
     }
 }
 
-impl Value for PrinterProp {}
-
 /// Inbound message for the printer actor.
 #[derive(Clone, Debug)]
 pub enum PrinterInboundMessage<T: Display + Clone + Sync + Send + 'static> {
@@ -30,7 +28,13 @@ pub enum PrinterInboundMessage<T: Display + Clone + Sync + Send + 'static> {
 }
 
 impl<T: Debug + Display + Clone + Sync + Send + 'static> OnMessage for PrinterInboundMessage<T> {
-    fn on_message(&self, prop: &PrinterProp, _state: &mut Self::State, _outputs: &Self::OutboundHub) {
+    fn on_message(
+        self,
+        prop: &PrinterProp,
+        _state: &mut Self::State,
+        _outputs: &Self::OutboundHub,
+        _request: &Self::RequestHub,
+    ) {
         match self {
             PrinterInboundMessage::Printable(printable) => {
                 println!("{}: {}", prop.topic, printable);
@@ -48,16 +52,17 @@ impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessageNew<T>
 }
 
 /// Generic printer actor.
-pub type Printer<T> = Actor<PrinterProp, PrinterInbound<T>, NullState, NullOutbound>;
+pub type Printer<T> = Actor<PrinterProp, PrinterInbound<T>, NullState, NullOutbound, NullRequest>;
 
-impl<T: Clone + Sync + Send + 'static + Debug + Display + Default>
+impl<T: Clone + Sync + Default + Send + 'static + Debug + Display>
     FromPropState<
         PrinterProp,
         PrinterInbound<T>,
         NullState,
         NullOutbound,
         PrinterInboundMessage<T>,
-        DefaultRunner<PrinterProp, PrinterInbound<T>, NullState, NullOutbound>,
+        NullRequest,
+        DefaultRunner<PrinterProp, PrinterInbound<T>, NullState, NullOutbound, NullRequest>,
     > for Printer<T>
 {
     fn name_hint(prop: &PrinterProp) -> String {
@@ -77,6 +82,7 @@ impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessage
     type Prop = PrinterProp;
     type State = NullState;
     type OutboundHub = NullOutbound;
+    type RequestHub = NullRequest;
 
     fn inbound_channel(&self) -> String {
         match self {
@@ -86,11 +92,17 @@ impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessage
 }
 
 impl<T: Clone + Debug + Display + Default + Sync + Send + 'static>
-    InboundHub<PrinterProp, NullState, NullOutbound, PrinterInboundMessage<T>>
+    InboundHub<PrinterProp, NullState, NullOutbound, NullRequest, PrinterInboundMessage<T>>
     for PrinterInbound<T>
 {
     fn from_builder(
-        builder: &mut ActorBuilder<PrinterProp, NullState, NullOutbound, PrinterInboundMessage<T>>,
+        builder: &mut ActorBuilder<
+            PrinterProp,
+            NullState,
+            NullOutbound,
+            NullRequest,
+            PrinterInboundMessage<T>,
+        >,
         actor_name: &str,
     ) -> Self {
         let m = InboundChannel::new(
