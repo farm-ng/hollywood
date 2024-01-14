@@ -3,34 +3,52 @@ use std::fmt::Debug;
 use rand_distr::{Distribution, Normal};
 
 use crate::compute::Context;
+use crate::core::request::{ReplyMessage, RequestChannel, RequestHub};
 use crate::core::{
     Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub, InboundMessage,
-    InboundMessageNew, Morph, NullProp, OnMessage, OutboundChannel, OutboundHub, Value,
+    InboundMessageNew, Morph, NullProp, OnMessage, OutboundChannel, OutboundHub,
 };
-use crate::examples::one_dim_robot::{RangeMeasurementModel, Robot, Stamped};
+use crate::example_actors::one_dim_robot::{RangeMeasurementModel, Robot, Stamped};
 use crate::macros::*;
+
+#[derive(Clone, Debug, Default)]
+pub struct PingPong {
+    pub ping: f64,
+    pub pong: f64,
+}
 
 /// Inbound channels for the simulation actor.
 #[derive(Clone, Debug)]
-#[actor_inputs(SimInbound, {NullProp, SimState, SimOutbound})]
+#[actor_inputs(SimInbound, {NullProp, SimState, SimOutbound, SimRequest})]
 pub enum SimInboundMessage {
     /// Time-stamp message to drive the simulation.
     TimeStamp(f64),
+    /// Reply message from the compute pipeline.
+    PingPongReply(ReplyMessage<PingPong>),
 }
 
 /// Simulation for the one-dimensional Robot.
 #[actor(SimInboundMessage)]
-pub type Sim = Actor<NullProp, SimInbound, SimState, SimOutbound>;
+pub type Sim = Actor<NullProp, SimInbound, SimState, SimOutbound, SimRequest>;
 
 impl OnMessage for SimInboundMessage {
     /// Invokes [SimState::process_time_stamp()] on TimeStamp.
-    fn on_message(&self, _prop: &Self::Prop, state: &mut Self::State, outbound: &Self::OutboundHub) {
+    fn on_message(
+        self,
+        _prop: &Self::Prop,
+        state: &mut Self::State,
+        outbound: &Self::OutboundHub,
+        request: &Self::RequestHub,
+    ) {
         match self {
             SimInboundMessage::TimeStamp(time) => {
-                state.process_time_stamp(*time, outbound);
-                if time >= &state.shutdown_time {
+                state.process_time_stamp(time, outbound, request);
+                if time >= state.shutdown_time {
                     outbound.cancel_request.send(());
                 }
+            }
+            SimInboundMessage::PingPongReply(msg) => {
+                println!("ping: {}, pong: {}", msg.reply.ping, msg.reply.pong);
             }
         }
     }
@@ -39,6 +57,12 @@ impl OnMessage for SimInboundMessage {
 impl InboundMessageNew<f64> for SimInboundMessage {
     fn new(_inbound_name: String, msg: f64) -> Self {
         SimInboundMessage::TimeStamp(msg)
+    }
+}
+
+impl InboundMessageNew<ReplyMessage<PingPong>> for SimInboundMessage {
+    fn new(_inbound_name: String, msg: ReplyMessage<PingPong>) -> Self {
+        SimInboundMessage::PingPongReply(msg)
     }
 }
 
@@ -57,7 +81,7 @@ impl SimState {
     const RANGE_MODEL: RangeMeasurementModel = RangeMeasurementModel {};
 
     /// One step of the simulation.
-    pub fn process_time_stamp(&mut self, time: f64, outbound: &SimOutbound) {
+    pub fn process_time_stamp(&mut self, time: f64, outbound: &SimOutbound, request: &SimRequest) {
         self.time = time;
         self.true_robot.position += self.true_robot.velocity * time;
         self.true_robot.velocity = 0.25 * (0.25 * time).cos();
@@ -89,10 +113,12 @@ impl SimState {
         outbound
             .noisy_velocity
             .send(Stamped::from_stamp_and_value(time, &noisy_velocity));
+
+        if time == 5.0 {
+            request.ping_pong.send_request(time);
+        }
     }
 }
-
-impl Value for SimState {}
 
 /// OutboundChannel channels for the simulation actor.
 #[actor_outputs]
@@ -109,4 +135,33 @@ pub struct SimOutbound {
     pub noisy_velocity: OutboundChannel<Stamped<f64>>,
     /// Compute pipeline cancel request.
     pub cancel_request: OutboundChannel<()>,
+}
+
+/// Request of the simulation actor.
+pub struct SimRequest {
+    /// Check time-stamp of receiver
+    pub ping_pong: RequestChannel<f64, PingPong, SimInboundMessage>,
+}
+
+impl RequestHub<SimInboundMessage> for SimRequest {
+    fn from_context_and_parent(
+        actor_name: &str,
+        sender: &tokio::sync::mpsc::Sender<SimInboundMessage>,
+    ) -> Self {
+        Self {
+            ping_pong: RequestChannel::new(actor_name.to_owned(), "ping_pong", sender),
+        }
+    }
+}
+
+impl Morph for SimRequest {
+    fn extract(&mut self) -> Self {
+        Self {
+            ping_pong: self.ping_pong.extract(),
+        }
+    }
+
+    fn activate(&mut self) {
+        self.ping_pong.activate();
+    }
 }

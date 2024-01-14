@@ -2,16 +2,16 @@ use crate::macros::*;
 
 // needed for actor_outputs macro
 pub use crate::compute::Context;
+use crate::core::request::NullRequest;
 pub use crate::core::{Morph, OutboundChannel, OutboundHub};
 
 // needed for actor_inputs macro
 pub use crate::core::{
     ActorBuilder, InboundChannel, InboundHub, InboundMessage, InboundMessageNew, OnMessage,
-    Value,
 };
 
 // needed for actor macro
-pub use crate::core::{Actor, DefaultRunner, FromPropState};
+pub use crate::core::{Actor, FromPropState, DefaultRunner};
 
 /// Outbound hub for the MovingAverage.
 #[actor_outputs]
@@ -41,10 +41,6 @@ impl Default for MovingAverageProp {
     }
 }
 
-impl Value for MovingAverageProp {}
-
-
-
 /// State of the MovingAverage actor.
 #[derive(Clone, Debug, Default)]
 pub struct MovingAverageState {
@@ -52,14 +48,10 @@ pub struct MovingAverageState {
     pub moving_average: f64,
 }
 
-impl Value for MovingAverageState {}
-
-
-
 /// Inbound message for the MovingAverage actor.
 ///
 #[derive(Clone, Debug)]
-#[actor_inputs(MovingAverageInbound, {MovingAverageProp, MovingAverageState, MovingAverageOutbound})]
+#[actor_inputs(MovingAverageInbound, {MovingAverageProp, MovingAverageState, MovingAverageOutbound, NullRequest})]
 pub enum MovingAverageMessage {
     /// a float value
     Value(f64),
@@ -67,14 +59,18 @@ pub enum MovingAverageMessage {
 
 impl OnMessage for MovingAverageMessage {
     /// Process the inbound time_stamp message.
-    fn on_message(&self, prop: &Self::Prop, state: &mut Self::State, outbound: &Self::OutboundHub) {
+    fn on_message(
+        self,
+        prop: &Self::Prop,
+        state: &mut Self::State,
+        outbound: &Self::OutboundHub,
+        _request: &Self::RequestHub,
+    ) {
         match &self {
             MovingAverageMessage::Value(new_value) => {
                 state.moving_average =
                     (prop.alpha * new_value) + (1.0 - prop.alpha) * state.moving_average;
-
                 outbound.average.send(state.moving_average);
-
                 if new_value > &prop.timeout {
                     outbound.cancel_request.send(());
                 }
@@ -92,9 +88,13 @@ impl InboundMessageNew<f64> for MovingAverageMessage {
 /// The MovingAverage actor.
 ///
 #[actor(MovingAverageMessage)]
-type MovingAverage =
-    Actor<MovingAverageProp, MovingAverageInbound, MovingAverageState, MovingAverageOutbound>;
-
+type MovingAverage = Actor<
+    MovingAverageProp,
+    MovingAverageInbound,
+    MovingAverageState,
+    MovingAverageOutbound,
+    NullRequest,
+>;
 
 /// Manual implementation of the moving average actor
 pub mod manual;

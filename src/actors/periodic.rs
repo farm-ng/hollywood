@@ -3,30 +3,27 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::compute::context::Context;
+use crate::core::connection::ConnectionEnum;
+
+use crate::core::request::NullRequest;
 use crate::core::{
-    actor::{FromPropState, ActorNode, DormantActorNode, GenericActor},
+    actor::{ActorNode, FromPropState, GenericActor},
     inbound::{ForwardMessage, NullInbound, NullMessage},
-    outbound::{ConnectionEnum, Morph, OutboundChannel, OutboundHub},
+    outbound::{Morph, OutboundChannel, OutboundHub},
     runner::Runner,
-    value::Value,
 };
-use crate::macros::*;
-
-
-/// Outbound hub of periodic actor, which consists of a single outbound channel.
-#[actor_outputs]
-pub struct PeriodicOutbound {
-     /// Time stamp outbound channel, which sends a messages every `period`
-    /// seconds with the current time stamp.
-    pub time_stamp: OutboundChannel<f64>,
-}
-
 
 /// A periodic actor.
 ///
 /// This is an actor that periodically sends a message to its outbound.
-pub type Periodic =
-    GenericActor<PeriodicProp, NullInbound, PeriodicState, PeriodicOutbound, PeriodicRunner>;
+pub type Periodic = GenericActor<
+    PeriodicProp,
+    NullInbound,
+    PeriodicState,
+    PeriodicOutbound,
+    NullRequest,
+    PeriodicRunner,
+>;
 
 impl Periodic {
     /// Create a new periodic actor, with a period of `period` seconds.
@@ -51,7 +48,8 @@ impl
         NullInbound,
         PeriodicState,
         PeriodicOutbound,
-        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
+        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
+        NullRequest,
         PeriodicRunner,
     > for Periodic
 {
@@ -76,8 +74,6 @@ impl Default for PeriodicProp {
     }
 }
 
-impl Value for PeriodicProp {}
-
 /// State of the periodic actor.
 #[derive(Clone, Debug)]
 pub struct PeriodicState {
@@ -94,9 +90,32 @@ impl Default for PeriodicState {
     }
 }
 
-impl Value for PeriodicState {}
+/// Outbound hub of periodic actor, which consists of a single outbound channel.
+pub struct PeriodicOutbound {
+    /// Time stamp outbound channel, which sends a messages every `period`
+    /// seconds with the current time stamp.
+    pub time_stamp: OutboundChannel<f64>,
+}
 
+impl Morph for PeriodicOutbound {
+    fn extract(&mut self) -> Self {
+        Self {
+            time_stamp: self.time_stamp.extract(),
+        }
+    }
 
+    fn activate(&mut self) {
+        self.time_stamp.activate();
+    }
+}
+
+impl OutboundHub for PeriodicOutbound {
+    fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self {
+        Self {
+            time_stamp: OutboundChannel::<f64>::new(context, "time_stamp".to_owned(), actor_name),
+        }
+    }
+}
 
 /// The custom runner for the periodic actor.
 pub struct PeriodicRunner {}
@@ -107,16 +126,17 @@ impl
         NullInbound,
         PeriodicState,
         PeriodicOutbound,
-        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
+        NullRequest,
+        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
     > for PeriodicRunner
 {
-    /// Create a new dormant actor.
-    fn new_dormant_actor(
+    /// Create a new actor node.
+    fn new_actor_node(
         name: String,
         prop: PeriodicProp,
         state: PeriodicState,
         _receiver: tokio::sync::mpsc::Receiver<
-            NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
+            NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
         >,
         _forward: std::collections::HashMap<
             String,
@@ -125,54 +145,36 @@ impl
                         PeriodicProp,
                         PeriodicState,
                         PeriodicOutbound,
-                        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound>,
+                        NullRequest,
+                        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
                     > + Send
                     + Sync,
             >,
         >,
         outbound: PeriodicOutbound,
-    ) -> Box<dyn DormantActorNode + Send + Sync> {
-        Box::new(DormantPeriodic {
+        _request: NullRequest,
+    ) -> Box<dyn ActorNode + Send + Sync> {
+        Box::new(PeriodicActor {
             name: name.clone(),
             prop,
             init_state: state.clone(),
-            outbound,
-        })
-    }
-}
-
-/// The dormant periodic actor.
-pub struct DormantPeriodic {
-    name: String,
-    prop: PeriodicProp,
-    init_state: PeriodicState,
-    outbound: PeriodicOutbound,
-}
-
-impl DormantActorNode for DormantPeriodic {
-    fn activate(mut self: Box<Self>) -> Box<dyn ActorNode + Send> {
-        self.outbound.activate();
-        Box::new(ActivePeriodic {
-            name: self.name.clone(),
-            prop: self.prop.clone(),
-            init_state: self.init_state.clone(),
             state: None,
-            outbound: Arc::new(self.outbound),
+            outbound: Some(outbound),
         })
     }
 }
 
 /// The active periodic actor.
-pub struct ActivePeriodic {
+pub struct PeriodicActor {
     name: String,
     prop: PeriodicProp,
     init_state: PeriodicState,
     state: Option<PeriodicState>,
-    outbound: Arc<PeriodicOutbound>,
+    outbound: Option<PeriodicOutbound>,
 }
 
 #[async_trait]
-impl ActorNode for ActivePeriodic {
+impl ActorNode for PeriodicActor {
     fn name(&self) -> &String {
         &self.name
     }
@@ -182,6 +184,8 @@ impl ActorNode for ActivePeriodic {
     }
 
     async fn run(&mut self, mut kill: tokio::sync::broadcast::Receiver<()>) {
+        let mut outbound = self.outbound.take().unwrap();
+        outbound.activate();
         self.reset();
 
         let state = self.state.as_mut().unwrap();
@@ -190,7 +194,7 @@ impl ActorNode for ActivePeriodic {
             (1000.0 * self.prop.period) as u64,
         ));
 
-        let conns = Arc::new(self.outbound.clone());
+        let conns = Arc::new(outbound);
 
         loop {
             interval.tick().await;

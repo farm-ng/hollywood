@@ -3,9 +3,9 @@ use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
 use hollywood::compute::Context;
 use hollywood::core::*;
-use hollywood::examples::one_dim_robot::draw::DrawState;
-use hollywood::examples::one_dim_robot::filter::FilterState;
-use hollywood::examples::one_dim_robot::{
+use hollywood::example_actors::one_dim_robot::draw::DrawState;
+use hollywood::example_actors::one_dim_robot::filter::FilterState;
+use hollywood::example_actors::one_dim_robot::{
     DrawActor, Filter, NamedFilterState, Robot, Sim, SimState, Stamped,
 };
 
@@ -63,6 +63,9 @@ async fn run_robot_example() {
         sim.outbound
             .true_robot
             .connect(context, &mut truth_printer.inbound.printable);
+
+
+        sim.request.ping_pong.connect(context, &mut filter.inbound.ping_pong_request);
         context.register_cancel_requester(&mut sim.outbound.cancel_request);
 
         filter

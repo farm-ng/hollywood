@@ -1,4 +1,3 @@
-#![deny(missing_docs)]
 //! Examples of hollywood actor framework.
 
 /// Moving average example

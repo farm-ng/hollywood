@@ -1,15 +1,15 @@
+use crate::core::request::NullRequest;
 use crate::core::InboundMessageNew;
 use crate::core::NullOutbound;
 use crate::core::OnMessage;
-use crate::core::Value;
 use crate::core::*;
-use crate::examples::one_dim_robot::{NamedFilterState, Robot, Stamped};
+use crate::example_actors::one_dim_robot::{NamedFilterState, Robot, Stamped};
 use crate::macros::*;
 use drawille::Canvas;
 
 /// Inbound channels for the draw actor
 #[derive(Clone, Debug)]
-#[actor_inputs(DrawInbound, {NullProp, DrawState, NullOutbound})]
+#[actor_inputs(DrawInbound, {NullProp, DrawState, NullOutbound,NullRequest})]
 pub enum DrawInboundMessage {
     /// True position of the robot.
     TruePos(Stamped<Robot>),
@@ -21,11 +21,17 @@ pub enum DrawInboundMessage {
 
 /// Draw actor for one-dim-robot example.
 #[actor(DrawInboundMessage)]
-pub type DrawActor = Actor<NullProp, DrawInbound, DrawState, NullOutbound>;
+pub type DrawActor = Actor<NullProp, DrawInbound, DrawState, NullOutbound, NullRequest>;
 
 impl OnMessage for DrawInboundMessage {
     /// Forward the message to the correct handler method of [DrawState].
-    fn on_message(&self, _prop: &NullProp, state: &mut Self::State, outbound: &Self::OutboundHub) {
+    fn on_message(
+        self,
+        _prop: &NullProp,
+        state: &mut Self::State,
+        outbound: &Self::OutboundHub,
+        _request: &Self::RequestHub,
+    ) {
         match self {
             DrawInboundMessage::TruePos(msg) => {
                 state.true_pos(msg.clone(), outbound);
@@ -99,7 +105,7 @@ impl DrawState {
         self.draw();
     }
 
-    /// Draw the current state to the console if all information of the most recent timestamp is 
+    /// Draw the current state to the console if all information of the most recent timestamp is
     /// available.
     pub fn draw(&mut self) {
         let factor = 6.0;
@@ -186,5 +192,3 @@ impl DrawState {
         }
     }
 }
-
-impl Value for DrawState {}

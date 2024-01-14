@@ -1,38 +1,55 @@
 use std::fmt::{Debug, Display};
 
 use crate::compute::Context;
+use crate::core::request::{NullRequest, RequestMessage};
 use crate::core::{
     Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub, InboundMessage,
-    InboundMessageNew, Morph, NullProp, OnMessage, OutboundChannel, OutboundHub, Value,
+    InboundMessageNew, Morph, NullProp, OnMessage, OutboundChannel, OutboundHub,
 };
-use crate::examples::one_dim_robot::{RangeMeasurementModel, Stamped};
+use crate::example_actors::one_dim_robot::{RangeMeasurementModel, Stamped};
 use hollywood_macros::{actor, actor_inputs, actor_outputs};
+
+use super::sim::PingPong;
 
 /// Inbound channels for the filter actor.
 #[derive(Clone, Debug)]
-#[actor_inputs(FilterInbound,{NullProp, FilterState,FilterOutbound})]
+#[actor_inputs(FilterInbound,{NullProp, FilterState,FilterOutbound,NullRequest})]
 pub enum FilterInboundMessage {
     /// noisy velocity measurements
     NoisyVelocity(Stamped<f64>),
     /// noisy range measurements
     NoisyRange(Stamped<f64>),
+    /// Request
+    PingPongRequest(RequestMessage<f64, PingPong>),
 }
 
 #[actor(FilterInboundMessage)]
-type Filter = Actor<NullProp, FilterInbound, FilterState, FilterOutbound>;
+type Filter = Actor<NullProp, FilterInbound, FilterState, FilterOutbound, NullRequest>;
 
 impl OnMessage for FilterInboundMessage {
     /// Process the inbound message NoisyVelocity or NoisyRange.
     ///
     /// On NoisyVelocity, FilterState::prediction is called.
     /// On NoisyRange, FilterState::update is called.
-    fn on_message(&self, _prop: &Self::Prop, state: &mut Self::State, outbound: &Self::OutboundHub) {
-        match &self {
+    fn on_message(
+        self,
+        _prop: &Self::Prop,
+        state: &mut Self::State,
+        outbound: &Self::OutboundHub,
+        _request: &Self::RequestHub,
+    ) {
+        match self {
             FilterInboundMessage::NoisyVelocity(v) => {
-                state.prediction(v, outbound);
+                state.prediction(&v, outbound);
             }
             FilterInboundMessage::NoisyRange(r) => {
-                state.update(r, outbound);
+                state.update(&r, outbound);
+            }
+            FilterInboundMessage::PingPongRequest(request) => {
+                request.reply(|ping| PingPong {
+                    ping,
+                    pong: state.time,
+                });
             }
         }
     }
@@ -48,6 +65,12 @@ impl InboundMessageNew<Stamped<f64>> for FilterInboundMessage {
     }
 }
 
+impl InboundMessageNew<RequestMessage<f64, PingPong>> for FilterInboundMessage {
+    fn new(_inbound_channel: String, request: RequestMessage<f64, PingPong>) -> Self {
+        FilterInboundMessage::PingPongRequest(request)
+    }
+}
+
 /// Filter state
 #[derive(Clone, Debug, Default)]
 pub struct FilterState {
@@ -56,8 +79,6 @@ pub struct FilterState {
     /// belief about the robot's position
     pub robot_position: PositionBelieve,
 }
-
-impl Value for FilterState {}
 
 impl Display for FilterState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

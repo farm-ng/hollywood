@@ -3,7 +3,7 @@ use hollywood::actors::{Periodic, Printer};
 use hollywood::compute::Context;
 use hollywood::core::{FromPropState, NullState};
 
-use hollywood::examples::moving_average::{MovingAverage, MovingAverageProp, MovingAverageState};
+use hollywood::example_actors::moving_average::{MovingAverage, MovingAverageProp, MovingAverageState};
 
 ///
 pub async fn run_moving_average_example() {
