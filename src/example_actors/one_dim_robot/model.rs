@@ -52,7 +52,7 @@ pub struct WorldModel {}
 
 impl WorldModel {
     /// Boundary of the world in the East.
-    pub const BOUNDARY_EAST: f64 = 15.0;
+    pub const BOUNDARY_EAST: f64 = 45.0;
 }
 
 /// A range measurement model.
@@ -60,7 +60,7 @@ pub struct RangeMeasurementModel {}
 
 impl RangeMeasurementModel {
     /// Standard deviation of the range measurement.
-    pub const RANGE_STD_DEV: f64 = 1.5;
+    pub const RANGE_STD_DEV: f64 = 0.1;
 
     /// Range measurement generative model.
     pub fn range(&self, robot_position: f64) -> f64 {
