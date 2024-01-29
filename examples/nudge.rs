@@ -1,24 +1,22 @@
 use hollywood::actors::printer::PrinterProp;
-use hollywood::actors::{Periodic, Printer};
+use hollywood::actors::{Nudge, Printer};
 use hollywood::compute::Context;
 use hollywood::core::*;
 
-///
 pub async fn run_tick_print_example() {
     let pipeline = Context::configure(&mut |context| {
-        let mut timer = Periodic::new_with_period(context, 1.0);
-        let mut time_printer = Printer::<f64>::from_prop_and_state(
+        let mut nudge = Nudge::<String>::new(context, "nudge".to_owned());
+        let mut nudge_printer = Printer::<String>::from_prop_and_state(
             context,
             PrinterProp {
-                topic: "time".to_string(),
+                topic: "nudge: ".to_string(),
             },
             NullState::default(),
         );
-        timer.outbound.time_stamp.connect_with_adapter(
-            context,
-            |t| 10.0 * t,
-            &mut time_printer.inbound.printable,
-        );
+        nudge
+            .outbound
+            .nudge
+            .connect(context, &mut nudge_printer.inbound.printable);
     });
 
     pipeline.print_flow_graph();

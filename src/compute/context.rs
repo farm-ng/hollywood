@@ -2,9 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::compute::{CancelRequest, Pipeline, Topology};
-use crate::core::{
-    InboundChannel, InboundMessage, OutboundChannel, OutboundConnection, ActorNode,
-};
+use crate::core::{ActorNode, InboundChannel, InboundMessage, OutboundChannel, OutboundConnection};
 
 /// The context of the compute graph which is used to configure the network topology.
 ///
@@ -35,7 +33,7 @@ impl Context {
         self.cancel_request_sender_template.clone()
     }
 
-       /// Registers an outbound channel for cancel request.
+    /// Registers an outbound channel for cancel request.
     ///
     /// Upon receiving a cancel request the registered outbound channel, the execution of the
     /// pipeline will be stopped.
@@ -48,7 +46,6 @@ impl Context {
                 phantom: PhantomData {},
             }));
     }
-
 
     fn new() -> Self {
         let (cancel_request_sender_template, cancel_request_receiver) =
@@ -84,13 +81,14 @@ impl Context {
     }
 
     pub(crate) fn connect_impl<
-        T: Clone + std::fmt::Debug + Sync + Send + 'static,
+        T0: Clone + std::fmt::Debug + Sync + Send + 'static,
+        T1: Clone + std::fmt::Debug + Sync + Send + 'static,
         M: InboundMessage,
     >(
         &mut self,
-        outbound: &mut OutboundChannel<T>,
-        inbound: &mut InboundChannel<T, M>,
+        outbound: &mut OutboundChannel<T0>,
+        inbound: &mut InboundChannel<T1, M>,
     ) {
         self.topology.connect(outbound, inbound);
-    } 
+    }
 }

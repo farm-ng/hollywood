@@ -3,7 +3,7 @@ use crate::macros::*;
 // needed for actor_outputs macro
 pub use crate::compute::Context;
 use crate::core::request::NullRequest;
-pub use crate::core::{Morph, OutboundChannel, OutboundHub};
+pub use crate::core::{Activate, OutboundChannel, OutboundHub};
 
 // needed for actor_inputs macro
 pub use crate::core::{
@@ -11,7 +11,7 @@ pub use crate::core::{
 };
 
 // needed for actor macro
-pub use crate::core::{Actor, FromPropState, DefaultRunner};
+pub use crate::core::{Actor, DefaultRunner, FromPropState};
 
 /// Outbound hub for the MovingAverage.
 #[actor_outputs]

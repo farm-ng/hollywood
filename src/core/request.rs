@@ -5,12 +5,12 @@ use crate::compute::Context;
 
 use super::connection::request_connection::RequestConnection;
 use super::connection::RequestConnectionEnum;
-use super::{InboundChannel, InboundMessage, InboundMessageNew, Morph};
+use super::{InboundChannel, InboundMessage, InboundMessageNew, Activate};
 
-/// A request hub is used to send requests to other actors.
-pub trait RequestHub<M: InboundMessage>: Send + Sync + 'static + Morph {
+/// A request hub is used to send requests to other actors which will reply later.
+pub trait RequestHub<M: InboundMessage>: Send + Sync + 'static + Activate {
     /// Create a new request hub for an actor.
-    fn from_context_and_parent(actor_name: &str, sender: &tokio::sync::mpsc::Sender<M>) -> Self;
+    fn from_parent_and_sender(actor_name: &str, sender: &tokio::sync::mpsc::Sender<M>) -> Self;
 }
 
 /// A request message with a reply channel.
@@ -70,18 +70,18 @@ pub struct ReplyMessage<Reply> {
     pub reply: Reply,
 }
 
-/// OutboundChannel is a connections for messages which are sent to a downstream actor.
+/// RequestChannel is a connections for messages which are sent to a downstream actor.
 pub struct RequestChannel<Request, Reply, M: InboundMessage> {
-    /// Unique name of the outbound.
+    /// Unique name of the request channel.
     pub name: String,
-    /// Name of the actor that sends the outbound messages.
+    /// Name of the actor that sends the request messages.
     pub actor_name: String,
-    pub(crate) connection_register: RequestConnectionEnum<RequestMessage<Request, Reply>>,
 
+    pub(crate) connection_register: RequestConnectionEnum<RequestMessage<Request, Reply>>,
     pub(crate) sender: tokio::sync::mpsc::Sender<M>,
 }
 
-impl<Request, Reply, M: InboundMessage> Morph for RequestChannel<Request, Reply, M> {
+impl<Request, Reply, M: InboundMessage> Activate for RequestChannel<Request, Reply, M> {
     fn extract(&mut self) -> Self {
         Self {
             name: self.name.clone(),
@@ -102,7 +102,7 @@ impl<
         M: InboundMessageNew<ReplyMessage<Reply>>,
     > RequestChannel<Request, Reply, M>
 {
-    /// Create a new outbound for actor in provided context.    
+    /// Create a new request channel for actor in provided context.    
     pub fn new(name: String, actor_name: &str, sender: &tokio::sync::mpsc::Sender<M>) -> Self {
         Self {
             name: name.clone(),
@@ -112,7 +112,7 @@ impl<
         }
     }
 
-    /// Connect the outbound channel from this actor to the inbound channel of another actor.
+    /// Connect the request channel from this actor to the inbound channel of another actor.
     pub fn connect<Me: InboundMessageNew<RequestMessage<Request, Reply>>>(
         &mut self,
         _ctx: &mut Context,
@@ -125,7 +125,7 @@ impl<
         }));
     }
 
-    /// Send a message to the connected inbound channels to other actors.
+    /// Send a message to the connected inbound channels of other actors.
     pub fn send_request(&self, msg: Request) {
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let msg = RequestMessage {
@@ -149,12 +149,12 @@ impl<
 pub struct NullRequest {}
 
 impl<M: InboundMessage> RequestHub<M> for NullRequest {
-    fn from_context_and_parent(_actor_name: &str, _sender: &tokio::sync::mpsc::Sender<M>) -> Self {
+    fn from_parent_and_sender(_actor_name: &str, _sender: &tokio::sync::mpsc::Sender<M>) -> Self {
         Self {}
     }
 }
 
-impl Morph for NullRequest {
+impl Activate for NullRequest {
     fn extract(&mut self) -> Self {
         Self {}
     }

@@ -1,9 +1,11 @@
 use hollywood::actors::printer::PrinterProp;
+use hollywood::actors::zip::ZipPair;
 use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
+use hollywood::actors::Zip3;
 use hollywood::compute::Context;
 use hollywood::core::*;
-use hollywood::example_actors::one_dim_robot::draw::DrawState;
+
 use hollywood::example_actors::one_dim_robot::filter::FilterState;
 use hollywood::example_actors::one_dim_robot::{
     DrawActor, Filter, NamedFilterState, Robot, Sim, SimState, Stamped,
@@ -11,13 +13,14 @@ use hollywood::example_actors::one_dim_robot::{
 
 async fn run_robot_example() {
     let pipeline = Context::configure(&mut |context| {
-        let mut timer = Periodic::new_with_period(context, 0.25);
+        let mut timer = Periodic::new_with_period(context, 0.1);
         let mut sim = Sim::from_prop_and_state(
             context,
             NullProp {},
             SimState {
-                shutdown_time: 10.0,
+                shutdown_time: 15.0,
                 time: 0.0,
+                seq: 0,
                 true_robot: Robot {
                     position: -2.0,
                     velocity: 0.4,
@@ -40,8 +43,9 @@ async fn run_robot_example() {
             NullState::default(),
         );
 
-        let mut draw_actor =
-            DrawActor::from_prop_and_state(context, NullProp {}, DrawState::default());
+        let mut zip = Zip3::new_default_init_state(context, NullProp {});
+
+        let mut draw = DrawActor::new_default_init_state(context, NullProp {});
 
         timer
             .outbound
@@ -54,28 +58,47 @@ async fn run_robot_example() {
         sim.outbound
             .noisy_range
             .connect(context, &mut filter.inbound.noisy_range);
-        sim.outbound
-            .true_robot
-            .connect(context, &mut draw_actor.inbound.true_pos);
-        sim.outbound
-            .true_range
-            .connect(context, &mut draw_actor.inbound.true_range);
+        sim.outbound.true_robot.connect_with_adapter(
+            context,
+            |x| ZipPair {
+                key: x.seq,
+                value: x,
+            },
+            &mut zip.inbound.item0,
+        );
+        sim.outbound.true_range.connect_with_adapter(
+            context,
+            |x| ZipPair {
+                key: x.seq,
+                value: x,
+            },
+            &mut zip.inbound.item1,
+        );
         sim.outbound
             .true_robot
             .connect(context, &mut truth_printer.inbound.printable);
 
-
-        sim.request.ping_pong.connect(context, &mut filter.inbound.ping_pong_request);
+        sim.request
+            .ping_pong
+            .connect(context, &mut filter.inbound.ping_pong_request);
         context.register_cancel_requester(&mut sim.outbound.cancel_request);
 
         filter
             .outbound
             .updated_state
             .connect(context, &mut filter_state_printer.inbound.printable);
-        filter
-            .outbound
-            .updated_state
-            .connect(context, &mut draw_actor.inbound.filter_est);
+        filter.outbound.updated_state.connect_with_adapter(
+            context,
+            |x| ZipPair {
+                key: x.state.seq,
+                value: x,
+            },
+            &mut zip.inbound.item2,
+        );
+
+        zip.outbound
+            .zipped
+            .connect(context, &mut draw.inbound.zipped);
     });
 
     pipeline.print_flow_graph();

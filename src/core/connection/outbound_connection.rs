@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::core::{outbound::GenericConnection, Morph};
+use crate::core::{outbound::GenericConnection, Activate};
 
-use super::{ConnectionRegister, ConnectionEnum};
+use super::{ConnectionEnum, ConnectionRegister};
 
 pub(crate) struct ConnectionConfig<T> {
     pub connection_register: ConnectionRegister<T>,
@@ -37,7 +37,6 @@ pub(crate) struct ActiveConnection<T> {
     pub maybe_register_landing_pad: Option<tokio::sync::oneshot::Receiver<ConnectionRegister<T>>>,
 }
 
-
 impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnum<T> {
     pub fn new() -> Self {
         Self::Config(ConnectionConfig::new())
@@ -68,7 +67,7 @@ impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnum<T> {
     }
 }
 
-impl<T> Morph for ConnectionEnum<T> {
+impl<T> Activate for ConnectionEnum<T> {
     fn extract(&mut self) -> Self {
         match self {
             Self::Config(config) => Self::Active(ActiveConnection {

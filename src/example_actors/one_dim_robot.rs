@@ -11,9 +11,9 @@ pub mod filter;
 pub use filter::{Filter, NamedFilterState};
 
 /// Drawing actor for the one dimensional robot.
-/// 
+///
 /// Draws "ascii art" of the robot and the filter state to the console.
-/// 
+///
 /// ```text
 /// time:2.25
 ///                         ⡏⢹⢀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡀

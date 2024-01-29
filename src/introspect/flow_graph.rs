@@ -297,8 +297,9 @@ impl FlowGraph {
 
                     let node_id = self
                         .topology
-                        .unique_idx_name_pairs.get_node_idx(&super_node.actor).unwrap();
-                     
+                        .unique_idx_name_pairs
+                        .get_node_idx(&super_node.actor)
+                        .unwrap();
 
                     for i in self
                         .topology

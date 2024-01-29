@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use tokio::sync::mpsc::error::SendError;
 
-use crate::core::{InboundMessage, InboundMessageNew, Morph};
+use crate::core::{InboundMessage, InboundMessageNew, Activate};
 
 use super::{RequestConnectionEnum, RequestConnectionRegister};
 
@@ -103,7 +103,7 @@ impl<T: Send + Sync + std::fmt::Debug + 'static> RequestConnectionEnum<T> {
     }
 }
 
-impl<T> Morph for RequestConnectionEnum<T> {
+impl<T> Activate for RequestConnectionEnum<T> {
     fn extract(&mut self) -> Self {
         match self {
             Self::Config(config) => Self::Active(ActiveRequestConnection {

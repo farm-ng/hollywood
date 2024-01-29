@@ -1,5 +1,7 @@
 use std::fmt::{Debug, Display};
 
+use hollywood_macros::actor_inputs;
+
 use crate::core::{
     request::NullRequest, Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel,
     InboundHub, InboundMessage, InboundMessageNew, NullOutbound, NullState, OnMessage,
@@ -22,12 +24,15 @@ impl Default for PrinterProp {
 
 /// Inbound message for the printer actor.
 #[derive(Clone, Debug)]
-pub enum PrinterInboundMessage<T: Display + Clone + Sync + Send + 'static> {
+#[actor_inputs(PrinterInbound<T>, {PrinterProp, NullState, NullOutbound, NullRequest})]
+pub enum PrinterInboundMessage<T: Default + Debug + Display + Clone + Sync + Send + 'static> {
     /// Printable message.
     Printable(T),
 }
 
-impl<T: Debug + Display + Clone + Sync + Send + 'static> OnMessage for PrinterInboundMessage<T> {
+impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> OnMessage
+    for PrinterInboundMessage<T>
+{
     fn on_message(
         self,
         prop: &PrinterProp,
@@ -43,7 +48,7 @@ impl<T: Debug + Display + Clone + Sync + Send + 'static> OnMessage for PrinterIn
     }
 }
 
-impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessageNew<T>
+impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> InboundMessageNew<T>
     for PrinterInboundMessage<T>
 {
     fn new(_inbound_name: String, msg: T) -> Self {
@@ -51,7 +56,7 @@ impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessageNew<T>
     }
 }
 
-/// Generic printer actor.
+/// Printer actor.
 pub type Printer<T> = Actor<PrinterProp, PrinterInbound<T>, NullState, NullOutbound, NullRequest>;
 
 impl<T: Clone + Sync + Default + Send + 'static + Debug + Display>
@@ -67,52 +72,5 @@ impl<T: Clone + Sync + Default + Send + 'static + Debug + Display>
 {
     fn name_hint(prop: &PrinterProp) -> String {
         format!("Printer({})", prop.topic)
-    }
-}
-
-/// Builder for the generic printer.
-pub struct PrinterInbound<T: Debug + Display + Clone + Sync + Send + 'static> {
-    /// Inbound channel to receive printable messages.
-    pub printable: InboundChannel<T, PrinterInboundMessage<T>>,
-}
-
-impl<T: Debug + Display + Clone + Sync + Send + 'static> InboundMessage
-    for PrinterInboundMessage<T>
-{
-    type Prop = PrinterProp;
-    type State = NullState;
-    type OutboundHub = NullOutbound;
-    type RequestHub = NullRequest;
-
-    fn inbound_channel(&self) -> String {
-        match self {
-            PrinterInboundMessage::Printable(_) => "Printable".to_owned(),
-        }
-    }
-}
-
-impl<T: Clone + Debug + Display + Default + Sync + Send + 'static>
-    InboundHub<PrinterProp, NullState, NullOutbound, NullRequest, PrinterInboundMessage<T>>
-    for PrinterInbound<T>
-{
-    fn from_builder(
-        builder: &mut ActorBuilder<
-            PrinterProp,
-            NullState,
-            NullOutbound,
-            NullRequest,
-            PrinterInboundMessage<T>,
-        >,
-        actor_name: &str,
-    ) -> Self {
-        let m = InboundChannel::new(
-            builder.context,
-            actor_name,
-            &builder.sender,
-            PrinterInboundMessage::Printable(T::default()).inbound_channel(),
-        );
-        builder.forward.insert(m.name.clone(), Box::new(m.clone()));
-
-        PrinterInbound { printable: m }
     }
 }

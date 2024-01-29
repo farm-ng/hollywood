@@ -149,12 +149,13 @@ impl Topology {
     }
 
     pub(crate) fn connect<
-        T: Clone + std::fmt::Debug + Sync + Send + 'static,
+        T0: Clone + std::fmt::Debug + Sync + Send + 'static,
+        T1: Clone + std::fmt::Debug + Sync + Send + 'static,
         M: InboundMessage,
     >(
         &mut self,
-        outbound: &mut OutboundChannel<T>,
-        inbound: &mut InboundChannel<T, M>,
+        outbound: &mut OutboundChannel<T0>,
+        inbound: &mut InboundChannel<T1, M>,
     ) {
         let output_parent_idx = self
             .unique_idx_name_pairs

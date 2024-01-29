@@ -9,7 +9,7 @@ use crate::core::request::NullRequest;
 use crate::core::{
     actor::{ActorNode, FromPropState, GenericActor},
     inbound::{ForwardMessage, NullInbound, NullMessage},
-    outbound::{Morph, OutboundChannel, OutboundHub},
+    outbound::{Activate, OutboundChannel, OutboundHub},
     runner::Runner,
 };
 
@@ -97,7 +97,7 @@ pub struct PeriodicOutbound {
     pub time_stamp: OutboundChannel<f64>,
 }
 
-impl Morph for PeriodicOutbound {
+impl Activate for PeriodicOutbound {
     fn extract(&mut self) -> Self {
         Self {
             time_stamp: self.time_stamp.extract(),

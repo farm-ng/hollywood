@@ -4,14 +4,14 @@ name = "hollywood"
 description = "hollywood actor framework"
 edition = "2021"
 include = [
-    "**/*.rs",
-    "Cargo.toml",
+  "**/*.rs",
+  "Cargo.toml",
 ]
-license = "Apache-2.0"
 keywords = ["actor", "compute", "graph", "pipeline"]
+license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/farm-ng/hollywood/"
-version = "0.3.0"
+version = "0.4.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,10 +19,13 @@ version = "0.3.0"
 async-trait = "0.1.51"
 drawille = "0.3.0"
 grid = "0.13.0"
-hollywood_macros = { version = "0.3.0", path = "hollywood_macros" }
+hollywood_macros = {version = "0.4.0", path = "hollywood_macros"}
+# hollywood intends to use only very basic features of nalgebra, hence 
+# future versions of nalgebra before the major < 1.0 release are likely to work
+nalgebra = ">= 0.32, <1.0"
 petgraph = "0.6.3"
 rand = "0.8.4"
 rand_distr = "0.4.3"
 # executor feature needed
-tokio = { version = "1.28.0", features = ["full"] }
+tokio = {version = "1.28.0", features = ["full"]}
 tokio-stream = "0.1.14"

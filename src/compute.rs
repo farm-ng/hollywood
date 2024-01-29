@@ -4,12 +4,10 @@ pub use context::Context;
 
 /// The compute graph of actors.
 pub mod pipeline;
-pub use pipeline::Pipeline;
 pub(crate) use pipeline::CancelRequest;
+pub use pipeline::Pipeline;
 
 /// The graph topology.
 pub mod topology;
-pub(crate) use topology::Topology;
 pub(crate) use topology::ActorNode;
-
-
+pub(crate) use topology::Topology;
