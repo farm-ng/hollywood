@@ -5,15 +5,18 @@ use std::fmt::{Debug, Display};
 pub struct Stamped<T: Clone + Debug> {
     /// Timestamp of the value.
     pub time: f64,
+    /// Monotonic sequence counter
+    pub seq: u64,
     /// The value.
     pub value: T,
 }
 
 impl<T: Clone + Debug> Stamped<T> {
     /// Creates a new value with a timestamp.
-    pub fn from_stamp_and_value(time: f64, value: &T) -> Self {
+    pub fn from_stamp_counter_and_value(time: f64, seq: u64, value: &T) -> Self {
         Self {
             time,
+            seq,
             value: value.clone(),
         }
     }

@@ -4,7 +4,7 @@
 pub mod moving_average;
 
 /// One dimensional robot Kalman filter example.
-/// 
+///
 /// ```text
 /// *   Periodic_0   *
 /// |   time_stamp   |
@@ -27,5 +27,3 @@ pub mod moving_average;
 /// *Printer(filter s*                  *  DrawActor_0   *
 /// ```
 pub mod one_dim_robot;
-
-

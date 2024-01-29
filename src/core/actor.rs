@@ -80,7 +80,7 @@ pub trait FromPropState<
 
         let mut builder = ActorBuilder::new(context, &actor_name, prop, initial_state);
 
-        let request = Request::from_context_and_parent(&actor_name, &builder.sender);
+        let request = Request::from_parent_and_sender(&actor_name, &builder.sender);
 
         let inbound = Inbound::from_builder(&mut builder, &actor_name);
         builder.build::<Inbound, Run>(inbound, out, request)

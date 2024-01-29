@@ -3,8 +3,8 @@ use std::fmt::{Debug, Display};
 use crate::compute::Context;
 use crate::core::request::{NullRequest, RequestMessage};
 use crate::core::{
-    Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub, InboundMessage,
-    InboundMessageNew, Morph, NullProp, OnMessage, OutboundChannel, OutboundHub,
+    Activate, Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub,
+    InboundMessage, InboundMessageNew, NullProp, OnMessage, OutboundChannel, OutboundHub,
 };
 use crate::example_actors::one_dim_robot::{RangeMeasurementModel, Stamped};
 use hollywood_macros::{actor, actor_inputs, actor_outputs};
@@ -13,7 +13,7 @@ use super::sim::PingPong;
 
 /// Inbound channels for the filter actor.
 #[derive(Clone, Debug)]
-#[actor_inputs(FilterInbound,{NullProp, FilterState,FilterOutbound,NullRequest})]
+#[actor_inputs(FilterInbound,{NullProp, FilterState, FilterOutbound, NullRequest})]
 pub enum FilterInboundMessage {
     /// noisy velocity measurements
     NoisyVelocity(Stamped<f64>),
@@ -76,8 +76,10 @@ impl InboundMessageNew<RequestMessage<f64, PingPong>> for FilterInboundMessage {
 pub struct FilterState {
     /// time of the last prediction or update
     pub time: f64,
+    /// Monotonically increasing sequence number
+    pub seq: u64,
     /// belief about the robot's position
-    pub robot_position: PositionBelieve,
+    pub pos_vel_acc: PositionBelieve,
 }
 
 impl Display for FilterState {
@@ -85,7 +87,7 @@ impl Display for FilterState {
         write!(
             f,
             "(time: {}, robot_position: {})",
-            self.time, self.robot_position.mean
+            self.time, self.pos_vel_acc.mean
         )
     }
 }
@@ -116,16 +118,20 @@ impl Display for NamedFilterState {
 #[derive(Clone, Debug)]
 pub struct PositionBelieve {
     /// mean of the position believe
-    pub mean: f64,
+    pub mean: nalgebra::Vector3<f64>,
     /// covariance of the position believe
-    pub covariance: f64,
+    pub covariance: nalgebra::Matrix3<f64>,
 }
 
 impl Default for PositionBelieve {
     fn default() -> Self {
         Self {
-            mean: 0.0,
-            covariance: 100.0,
+            mean: nalgebra::Vector3::new(0.0, 0.0, 0.0),
+            covariance: nalgebra::Matrix3::new(
+                100.0, 0.0, 0.0, //
+                0.0, 100.0, 0.0, //
+                0.0, 0.0, 100.0,
+            ),
         }
     }
 }
@@ -140,9 +146,43 @@ impl FilterState {
         let dt = noisy_velocity.time - self.time;
         self.time = noisy_velocity.time;
 
-        self.robot_position.mean += noisy_velocity.value * dt;
-        const VELOCITY_STD_DEV: f64 = 0.1;
-        self.robot_position.covariance += VELOCITY_STD_DEV * VELOCITY_STD_DEV * dt;
+        // 1. Random-walk acceleration motion model
+        self.pos_vel_acc.mean[0] +=
+            self.pos_vel_acc.mean[1] * dt + 0.5 * self.pos_vel_acc.mean[2] * dt * dt;
+        self.pos_vel_acc.mean[1] += self.pos_vel_acc.mean[2] * dt;
+        let f = nalgebra::Matrix3::new(1.0, dt, 0.5 * dt * dt, 0.0, 1.0, dt, 0.0, 0.0, 1.0);
+        let acceleration_noise_variance = 0.5;
+        let q = nalgebra::Matrix3::new(
+            0.25 * dt.powi(4),
+            0.5 * dt.powi(3),
+            0.5 * dt.powi(2) * acceleration_noise_variance,
+            0.5 * dt.powi(3),
+            dt.powi(2),
+            dt * acceleration_noise_variance,
+            0.5 * dt.powi(2) * acceleration_noise_variance,
+            dt * acceleration_noise_variance,
+            acceleration_noise_variance,
+        );
+        self.pos_vel_acc.covariance = f * self.pos_vel_acc.covariance * f.transpose() + q;
+
+        // 2. Update velocity based on the velocity measurement
+        // (strictly speaking this is an update, not a prediction)
+        let h_velocity = nalgebra::Matrix1x3::new(0.0, 1.0, 0.0);
+        let predicted_velocity = self.pos_vel_acc.mean[1];
+        let innovation_velocity = noisy_velocity.value - predicted_velocity;
+        const VELOCITY_MEASUREMENT_NOISE: f64 = 0.1;
+        let r_velocity =
+            nalgebra::Matrix1::new(VELOCITY_MEASUREMENT_NOISE * VELOCITY_MEASUREMENT_NOISE);
+        let kalman_gain_velocity = self.pos_vel_acc.covariance
+            * h_velocity.transpose()
+            * (h_velocity * self.pos_vel_acc.covariance * h_velocity.transpose() + r_velocity)
+                .try_inverse()
+                .unwrap();
+        self.pos_vel_acc.mean += kalman_gain_velocity * innovation_velocity;
+        let identity = nalgebra::Matrix3::identity();
+        self.pos_vel_acc.covariance =
+            (identity - kalman_gain_velocity * h_velocity) * self.pos_vel_acc.covariance;
+
         outbound.predicted_state.send(NamedFilterState::new(
             "Predicted: ".to_owned(),
             self.clone(),
@@ -153,17 +193,21 @@ impl FilterState {
     ///
     /// Updates the robot's position based on the range measurement.
     pub fn update(&mut self, noisy_range: &Stamped<f64>, outbound: &FilterOutbound) {
-        let predicted_range = Self::RANGE_MODEL.range(self.robot_position.mean);
-        const RANGE_STD_DEV: f64 = 1.5 * RangeMeasurementModel::RANGE_STD_DEV;
-
-        let innovation = noisy_range.value - predicted_range;
-
-        let mat_h = Self::RANGE_MODEL.dx_range();
-        let innovation_covariance = self.robot_position.covariance + RANGE_STD_DEV * RANGE_STD_DEV;
-        let kalman_gain = mat_h * self.robot_position.covariance / innovation_covariance;
-        self.robot_position.mean += kalman_gain * innovation;
-        self.robot_position.covariance *= 1.0 - kalman_gain * mat_h;
-
+        // Update position based on the range measurement
+        let h = nalgebra::Matrix1x3::new(1.0, 0.0, 0.0);
+        let predicted_range = Self::RANGE_MODEL.range(self.pos_vel_acc.mean[0]);
+        let innovation = predicted_range - noisy_range.value;
+        const RANGE_STD_DEV: f64 = RangeMeasurementModel::RANGE_STD_DEV;
+        let r = nalgebra::Matrix1::new(RANGE_STD_DEV * RANGE_STD_DEV);
+        let kalman_gain = self.pos_vel_acc.covariance
+            * h.transpose()
+            * (h * self.pos_vel_acc.covariance * h.transpose() + r)
+                .try_inverse()
+                .unwrap();
+        self.pos_vel_acc.mean += kalman_gain * innovation;
+        let identity = nalgebra::Matrix3::identity();
+        self.pos_vel_acc.covariance = (identity - kalman_gain * h) * self.pos_vel_acc.covariance;
+        self.seq += 1;
         outbound
             .updated_state
             .send(NamedFilterState::new("Updated: ".to_owned(), self.clone()));

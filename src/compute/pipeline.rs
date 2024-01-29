@@ -65,8 +65,8 @@ impl Pipeline {
 
     /// Executes the compute graph.
     ///
-    /// It consumes the self, starts  execution of the pipeline and returns a future (since it is 
-    /// an async function) that resolves to the pipeline itself. The future is completed when all 
+    /// It consumes the self, starts  execution of the pipeline and returns a future (since it is
+    /// an async function) that resolves to the pipeline itself. The future is completed when all
     /// actors have completed their execution.
     ///
     /// In particular, [ActorNode::run()] is called for each actor in the pipeline in a dedicated

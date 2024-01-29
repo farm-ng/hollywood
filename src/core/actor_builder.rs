@@ -1,5 +1,3 @@
-
-
 use crate::compute::context::Context;
 use crate::core::{
     actor::GenericActor,
@@ -14,14 +12,7 @@ use super::request::RequestHub;
 /// Creates actor from its components.
 ///
 /// Used in  [`InboundHub::from_builder`] public interface.
-pub struct ActorBuilder<
-    'a,
-    Prop,
-    State,
-    OutboundHub,
-    Request: RequestHub<M>,
-    M: InboundMessage,
-> {
+pub struct ActorBuilder<'a, Prop, State, OutboundHub, Request: RequestHub<M>, M: InboundMessage> {
     /// unique identifier of the actor
     pub actor_name: String,
     prop: Prop,

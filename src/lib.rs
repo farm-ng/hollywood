@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! # Hollywood
 //!
 //! Hollywood is an actor framework for Rust.
@@ -20,18 +22,19 @@
 //!
 //! The library is organized in the following modules:
 //!
-//! - The [macros] module contains the three macros that are used to define an actors with
-//!   minimal boilerplate.
 //! - The [core] module contains the core structs and traits of the library. [Actor](core::Actor)
 //!   is a generic struct that represents an actor. [InboundHub](core::InboundHub) is the trait
 //!   which represents the collection of inbound channels of an actor. Similarly,
 //!   [OutboundHub](core::OutboundHub) is the trait which represents the collection of outbound
 //!   channels of an actor.
-//!
+//! 
 //!   Most importantly, [OnMessage](core::OnMessage) is the main entry point for user code and sets
 //!   the behavior of a user-defines actor. [OnMessage::on_message()](core::OnMessage::on_message())
 //!   processes incoming messages, updates the actor's state and sends messages to downstream actors
 //!   in the pipeline.
+//! 
+//! - The [macros] module contains the three macros that are used to define an actors with
+//!   minimal boilerplate.
 //!
 //! - The [compute] module contains the [Context](compute::Context) and
 //!   [Pipeline](compute::Pipeline) which are used to configure a set of actors, connect
@@ -39,10 +42,10 @@
 //!
 //! - The [actors] module contains a set of predefined actors that can be used as part of a compute
 //!   pipelines.
-//! 
+//!
 //! - The [introspect] module contains a some visualization tools to inspect the compute pipeline.
 //!
-//! - The [examples] module contains a set of examples actors that demonstrate how to use the library.
+//! - The [example_actors] module contains a set of examples actors that demonstrate how to use the library.
 //!
 //! ## Example: moving average
 //!
@@ -98,7 +101,7 @@
 //! Note that MovingAverageState implements [Default] trait through the derive macro, and hence
 //! moving_average is initialized to 0.0 which is the default value for f64. An explicit
 //! implementation of the [Default] trait can be used to set the values of member fields as done for
-//! the [examples::moving_average::MovingAverageProp] struct here.
+//! the [example_actors::moving_average::MovingAverageProp] struct here.
 //!
 //! ### Inbound hub
 //!
@@ -303,8 +306,9 @@ pub mod example_actors;
 /// following order:
 ///
 /// 1. [actor_outputs](macros::actor_outputs)
-/// 2. [actor_inputs](macros::actor_inputs) which depends on 1.
-/// 3. [actor](macros::actor) which depends on 1. and 2.
+/// 2. [actor_requests](macros::actor_requests)
+/// 3. [actor_inputs](macros::actor_inputs) which depends on 1. and 2.
+/// 4. [actor](macros::actor) which depends on 1., 2. and 3.
 ///
 /// The documentation in this module is rather technical. For a more practical introduction, please
 /// refer to the examples in the root of the [crate](crate#example-moving-average).
@@ -330,12 +334,35 @@ pub mod macros {
     /// user-specified name CHANNEL* and a user specified type TYPE*.
     ///
     /// Effect: The macro generates the [OutboundHub](crate::core::OutboundHub) and
-    /// [Morph](crate::core::Morph) implementations for the provided struct OUTBOUND.
+    /// [Activate](crate::core::Activate) implementations for the provided struct OUTBOUND.
     ///
     /// This is the first of three macros to define an actor. The other two are [macro@actor_inputs]
     /// and [macro@actor].
     ///
     pub use hollywood_macros::actor_outputs;
+
+    /// This macro generates the boilerplate for the request hub struct it is applied to.
+    ///
+    /// Macro template:
+    ///
+    /// ``` text
+    /// #[actor_requests]
+    /// pub struct REQUEST {
+    ///     pub CHANNEL0: RequestChannel<REQ_TYPE0, REPL_TYPE0, M0>,
+    ///     pub CHANNEL1: RequestChannel<REQ_TYPE1, REPL_TYPE2, M1>,
+    ///     ...
+    /// }
+    /// ```
+    ///
+    /// Here, REQUEST is the user-specified name of the struct. The struct shall be defined right
+    /// after the macro invocation. The request struct consists of one or more request channels. 
+    /// Each request channel has name CHANNEL*, a request type REQ_TYPE*, a reply type REPL_TYPE*,
+    /// and a message type M*.
+    ///
+    /// Effect: The macro generates the [RequestHub](crate::core::RequestHub) and
+    /// [Activate](crate::core::Activate) implementations for the provided struct REQUEST.
+    ///
+    pub use hollywood_macros::actor_requests;
 
     /// This macro generates the boilerplate for the inbound hub of an actor.
     ///
@@ -357,7 +384,9 @@ pub mod macros {
     ///
     /// Prerequisite:
     ///   - The OUTBOUND struct is defined and implements [OutboundHub](crate::core::OutboundHub)
-    ///     and [Morph](crate::core::Morph), typically using the [macro@actor_outputs] macro.
+    ///     and [Activate](crate::core::Activate), typically using the [macro@actor_outputs] macro.
+     ///  - The REQUEST struct is defined and implements [RequestHub](crate::core::RequestHub) and
+    ///     [Activate](crate::core::Activate), e.g. using the [actor_requests] macro.
     ///   - The PROP and STATE structs are defined.
     ///
     /// Effects:
@@ -366,8 +395,6 @@ pub mod macros {
     ///     [InboundHub](crate::core::InboundHub) trait for it.
     ///   - Implements the [InboundMessage](crate::core::InboundMessage) trait for INBOUND_MESSAGE.
     ///
-    /// This is the second of three macros to define an actor. The other two are
-    /// [macro@actor_outputs] and [macro@actor].
     pub use hollywood_macros::actor_inputs;
 
     /// This macro generates the boilerplate to define an new actor type.
@@ -376,7 +403,7 @@ pub mod macros {
     ///
     /// ``` text
     /// #[actor(INBOUND_MESSAGE)]
-    /// type ACTOR = Actor<PROP, INBOUND, STATE, OUTBOUND>;
+    /// type ACTOR = Actor<PROP, INBOUND, STATE, OUTBOUND, REQUEST>;
     /// ```
     ///
     /// Here, ACTOR is the user-specified name of the actor type. The actor type shall be defined
@@ -384,7 +411,9 @@ pub mod macros {
     ///
     /// Prerequisites:
     ///   - The OUTBOUND struct is defined and implements (OutboundHub)[crate::core::OutboundHub]
-    ///     and [Morph](crate::core::Morph), e.g. using the [actor_outputs] macro.
+    ///     and [Activate](crate::core::Activate), e.g. using the [actor_outputs] macro.
+    ///   - The REQUEST struct is defined and implements [RequestHub](crate::core::RequestHub) and
+    ///     [Activate](crate::core::Activate), e.g. using the [actor_requests] macro.
     ///   - The INBOUND_MESSAGE enum is defined and implements
     ///     [InboundMessage](crate::core::InboundMessage), as well as the INBOUND
     ///     struct is defined and implements the [InboundHub](crate::core::InboundHub) trait, e.g.
@@ -395,7 +424,6 @@ pub mod macros {
     ///   - This macro implements the [FromPropState](crate::core::FromPropState) trait for the ACTOR
     ///     type.
     ///
-    /// This is the last of the three macros that need to be used to define a new actor type. The
-    /// first one is [macro@actor_outputs], the second one is [macro@actor_inputs].
     pub use hollywood_macros::actor;
+
 }

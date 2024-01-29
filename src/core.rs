@@ -2,8 +2,8 @@
 
 /// Actor
 pub mod actor;
-pub use actor::{Actor, FromPropState};
 pub(crate) use actor::ActorNode;
+pub use actor::{Actor, FromPropState};
 
 /// Actor builder
 pub mod actor_builder;
@@ -17,13 +17,14 @@ pub use inbound::{
     OnMessage,
 };
 
-/// Outbound 
+/// Outbound
 pub mod outbound;
 pub(crate) use outbound::OutboundConnection;
-pub use outbound::{Morph, NullOutbound, OutboundChannel, OutboundHub};
+pub use outbound::{Activate, NullOutbound, OutboundChannel, OutboundHub};
 
 /// Request
 pub mod request;
+pub use request::{NullRequest, RequestHub};
 
 /// Connection
 pub mod connection;
