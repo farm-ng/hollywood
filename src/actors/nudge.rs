@@ -64,7 +64,6 @@ pub struct NudgeOutbound<Item: 'static + Default + Clone + Send + Sync + std::fm
     pub nudge: OutboundChannel<Item>,
 }
 
-
 /// The custom nudge runner
 pub struct NudgeRunner {}
 
@@ -129,14 +128,10 @@ impl<Item: 'static + Default + Clone + Send + Sync + std::fmt::Debug> ActorNode
         &self.name
     }
 
-    fn reset(&mut self) {
-        self.state = Some(self.init_state.clone());
-    }
-
     async fn run(&mut self, mut _kill: tokio::sync::broadcast::Receiver<()>) {
         let mut outbound = self.outbound.take().unwrap();
         outbound.activate();
-        self.reset();
+        self.state = Some(self.init_state.clone());
 
         match &outbound.nudge.connection_register {
             ConnectionEnum::Config(_) => {

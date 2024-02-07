@@ -74,7 +74,7 @@ impl<
 impl<
         Prop: std::marker::Send + std::marker::Sync + 'static,
         Inbound: InboundHub<Prop, State, Outbound, Request, M>,
-        State: Clone + std::marker::Send + std::marker::Sync + 'static,
+        State: std::marker::Send + std::marker::Sync + 'static,
         Outbound: OutboundHub,
         M: InboundMessage,
         Request: RequestHub<M>,
@@ -93,8 +93,7 @@ impl<
         Box::new(ActorNodeImpl::<Prop, State, Outbound, Request, M> {
             name,
             prop,
-            init_state,
-            state: None,
+            state: Some(init_state),
             receiver: Some(receiver),
             outbound,
             forward,

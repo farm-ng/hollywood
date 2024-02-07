@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use tokio::sync::mpsc::error::SendError;
 
-use crate::core::{InboundMessage, InboundMessageNew, Activate};
+use crate::core::{Activate, InboundMessage, InboundMessageNew};
 
 use super::{RequestConnectionEnum, RequestConnectionRegister};
 

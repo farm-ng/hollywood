@@ -46,7 +46,7 @@ pub type Actor<Prop, Inbound, State, OutboundHub, Request> = GenericActor<
 pub trait FromPropState<
     Prop,
     Inbound: InboundHub<Prop, State, Outbound, Request, M>,
-    State: Default,
+    State,
     Outbound: OutboundHub,
     M: InboundMessage,
     Request: RequestHub<M>,
@@ -56,16 +56,6 @@ pub trait FromPropState<
     /// Produces a hint for the actor. The name_hint is used as a base to
     /// generate a unique name.
     fn name_hint(prop: &Prop) -> String;
-
-    /// Produces a new actor with default state.
-    ///
-    /// Also, a dormant actor node is created added to the context.
-    fn new_default_init_state(
-        context: &mut Context,
-        prop: Prop,
-    ) -> GenericActor<Prop, Inbound, State, Outbound, Request, Run> {
-        Self::from_prop_and_state(context, prop, State::default())
-    }
 
     /// Produces a new actor with the given state.
     ///
@@ -93,9 +83,6 @@ pub trait ActorNode {
     /// Return the actor's name.
     fn name(&self) -> &String;
 
-    /// Resets the actor to its initial state.
-    fn reset(&mut self);
-
     /// Run the actor as a node within the compute pipeline:
     ///
     ///   * For each inbound channel there are zero, one or more incoming connections. Messages on
@@ -121,7 +108,6 @@ pub type ForwardTable<Prop, State, OutboundHub, Request, M> =
 pub(crate) struct ActorNodeImpl<Prop, State, OutboundHub, Request, M> {
     pub(crate) name: String,
     pub(crate) prop: Prop,
-    pub(crate) init_state: State,
     pub(crate) state: Option<State>,
     pub(crate) receiver: Option<tokio::sync::mpsc::Receiver<M>>,
     pub(crate) outbound: OutboundHub,
@@ -137,7 +123,7 @@ impl<Prop, State, Outbound: OutboundHub, Request, M: InboundMessage>
 #[async_trait]
 impl<
         Prop: std::marker::Send + std::marker::Sync + 'static,
-        State: Clone + std::marker::Send + std::marker::Sync + 'static,
+        State: std::marker::Send + std::marker::Sync + 'static,
         Outbound: OutboundHub,
         Request: RequestHub<M>,
         M: InboundMessage,
@@ -147,20 +133,15 @@ impl<
         &self.name
     }
 
-    fn reset(&mut self) {
-        self.state = Some(self.init_state.clone());
-    }
-
     async fn run(&mut self, kill: tokio::sync::broadcast::Receiver<()>) {
         self.outbound.activate();
         self.request.activate();
 
-        let new_state = self.init_state.clone();
         let (state, recv) = on_message(
             self.name.clone(),
             &self.prop,
             OnMessageMutValues {
-                state: new_state,
+                state: self.state.take().unwrap(),
                 receiver: self.receiver.take().unwrap(),
                 kill,
             },
@@ -169,7 +150,6 @@ impl<
             &self.request,
         )
         .await;
-
         self.state = Some(state);
         self.receiver = Some(recv);
     }

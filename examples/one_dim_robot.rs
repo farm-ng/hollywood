@@ -1,4 +1,5 @@
 use hollywood::actors::printer::PrinterProp;
+use hollywood::actors::zip::Zip3State;
 use hollywood::actors::zip::ZipPair;
 use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
@@ -6,6 +7,7 @@ use hollywood::actors::Zip3;
 use hollywood::compute::Context;
 use hollywood::core::*;
 
+use hollywood::example_actors::one_dim_robot::draw::DrawState;
 use hollywood::example_actors::one_dim_robot::filter::FilterState;
 use hollywood::example_actors::one_dim_robot::{
     DrawActor, Filter, NamedFilterState, Robot, Sim, SimState, Stamped,
@@ -43,9 +45,9 @@ async fn run_robot_example() {
             NullState::default(),
         );
 
-        let mut zip = Zip3::new_default_init_state(context, NullProp {});
+        let mut zip = Zip3::from_prop_and_state(context, NullProp {}, Zip3State::default());
 
-        let mut draw = DrawActor::new_default_init_state(context, NullProp {});
+        let mut draw = DrawActor::from_prop_and_state(context, NullProp {}, DrawState::default());
 
         timer
             .outbound

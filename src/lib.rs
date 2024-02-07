@@ -27,12 +27,12 @@
 //!   which represents the collection of inbound channels of an actor. Similarly,
 //!   [OutboundHub](core::OutboundHub) is the trait which represents the collection of outbound
 //!   channels of an actor.
-//! 
+//!
 //!   Most importantly, [OnMessage](core::OnMessage) is the main entry point for user code and sets
 //!   the behavior of a user-defines actor. [OnMessage::on_message()](core::OnMessage::on_message())
 //!   processes incoming messages, updates the actor's state and sends messages to downstream actors
 //!   in the pipeline.
-//! 
+//!
 //! - The [macros] module contains the three macros that are used to define an actors with
 //!   minimal boilerplate.
 //!
@@ -355,7 +355,7 @@ pub mod macros {
     /// ```
     ///
     /// Here, REQUEST is the user-specified name of the struct. The struct shall be defined right
-    /// after the macro invocation. The request struct consists of one or more request channels. 
+    /// after the macro invocation. The request struct consists of one or more request channels.
     /// Each request channel has name CHANNEL*, a request type REQ_TYPE*, a reply type REPL_TYPE*,
     /// and a message type M*.
     ///
@@ -385,7 +385,7 @@ pub mod macros {
     /// Prerequisite:
     ///   - The OUTBOUND struct is defined and implements [OutboundHub](crate::core::OutboundHub)
     ///     and [Activate](crate::core::Activate), typically using the [macro@actor_outputs] macro.
-     ///  - The REQUEST struct is defined and implements [RequestHub](crate::core::RequestHub) and
+    ///  - The REQUEST struct is defined and implements [RequestHub](crate::core::RequestHub) and
     ///     [Activate](crate::core::Activate), e.g. using the [actor_requests] macro.
     ///   - The PROP and STATE structs are defined.
     ///
@@ -425,5 +425,4 @@ pub mod macros {
     ///     type.
     ///
     pub use hollywood_macros::actor;
-
 }

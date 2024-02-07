@@ -48,7 +48,6 @@ impl<const N: usize, Key: PartialEq + Eq + PartialOrd + Ord, T> Ord for ZipPair<
     }
 }
 
-
 zip_n!(2);
 zip_n!(3);
 zip_n!(4);

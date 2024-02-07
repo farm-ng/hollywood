@@ -5,7 +5,7 @@ use crate::compute::Context;
 
 use super::connection::request_connection::RequestConnection;
 use super::connection::RequestConnectionEnum;
-use super::{InboundChannel, InboundMessage, InboundMessageNew, Activate};
+use super::{Activate, InboundChannel, InboundMessage, InboundMessageNew};
 
 /// A request hub is used to send requests to other actors which will reply later.
 pub trait RequestHub<M: InboundMessage>: Send + Sync + 'static + Activate {
@@ -16,8 +16,27 @@ pub trait RequestHub<M: InboundMessage>: Send + Sync + 'static + Activate {
 /// A request message with a reply channel.
 #[derive(Debug, Clone, Default)]
 pub struct RequestMessage<Request, Reply> {
-    request: Request,
-    reply_channel: Option<Arc<tokio::sync::oneshot::Sender<ReplyMessage<Reply>>>>,
+    /// The request.
+    pub request: Request,
+    /// The reply channel.
+    pub reply_channel: Option<Arc<tokio::sync::oneshot::Sender<ReplyMessage<Reply>>>>,
+}
+
+/// A trait for request messages.
+pub trait IsRequestMessage: Send + Sync + 'static + Clone + Debug + Default {
+    /// The request type.
+    type Request;
+    /// The reply type.
+    type Reply;
+}
+
+impl<
+        Request: Send + Sync + 'static + Clone + Debug + Default,
+        Reply: Send + Sync + 'static + Clone + Debug + Default,
+    > IsRequestMessage for RequestMessage<Request, Reply>
+{
+    type Request = Reply;
+    type Reply = Reply;
 }
 
 impl<Request, Reply: Debug> RequestMessage<Request, Reply> {

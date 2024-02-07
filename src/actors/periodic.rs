@@ -179,14 +179,10 @@ impl ActorNode for PeriodicActor {
         &self.name
     }
 
-    fn reset(&mut self) {
-        self.state = Some(self.init_state.clone());
-    }
-
     async fn run(&mut self, mut kill: tokio::sync::broadcast::Receiver<()>) {
         let mut outbound = self.outbound.take().unwrap();
         outbound.activate();
-        self.reset();
+        self.state = Some(self.init_state.clone());
 
         let state = self.state.as_mut().unwrap();
 
