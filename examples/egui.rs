@@ -1,7 +1,8 @@
-use std::sync::Arc;
 use std::time::Duration;
 
-use hollywood::actors::egui::{EguiActor, EguiAppFromBuilder, GenericEguiBuilder, Stream};
+use hollywood::actors::egui::{
+    EguiActor, EguiAppFromBuilder, GenericEguiBuilder, Stream,
+};
 use hollywood::compute::Context;
 use hollywood::core::request::RequestMessage;
 use hollywood::core::*;
@@ -26,7 +27,7 @@ impl OnMessage for ContentGeneratorInboundMessage {
             ContentGeneratorInboundMessage::Tick(new_value) => {
                 match state.reset_request.try_recv() {
                     Ok(_) => {
-                        state.offset = -new_value.clone();
+                        state.offset = -*new_value;
                     }
                     Err(_) => {}
                 }
@@ -94,7 +95,7 @@ type EguiAppExampleBuilder =
 
 pub struct EguiAppExample {
     pub message_recv: std::sync::mpsc::Receiver<Stream<PlotMessage>>,
-    pub in_request_recv: std::sync::mpsc::Receiver<RequestMessage<String, String>>,
+    pub request_recv: std::sync::mpsc::Receiver<RequestMessage<String, String>>,
     pub reset_side_channel_tx: tokio::sync::broadcast::Sender<()>,
 
     pub x: f64,
@@ -103,10 +104,10 @@ pub struct EguiAppExample {
 }
 
 impl EguiAppFromBuilder<EguiAppExampleBuilder> for EguiAppExample {
-    fn new(builder: EguiAppExampleBuilder) -> Box<EguiAppExample> {
+    fn new(builder: EguiAppExampleBuilder, _dummy_example_state: String) -> Box<EguiAppExample> {
         Box::new(EguiAppExample {
             message_recv: builder.message_recv,
-            in_request_recv: builder.in_request_recv,
+            request_recv: builder.request_recv,
             reset_side_channel_tx: builder.config.reset_side_channel_tx,
             x: 0.0,
             sin_value: 0.0,
@@ -115,10 +116,12 @@ impl EguiAppFromBuilder<EguiAppExampleBuilder> for EguiAppExample {
     }
 
     type Out = EguiAppExample;
+
+    type State = String;
 }
 use eframe::egui;
 impl eframe::App for EguiAppExample {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         loop {
             match self.message_recv.try_recv() {
                 Ok(value) => match value.msg {
@@ -137,7 +140,7 @@ impl eframe::App for EguiAppExample {
             }
         }
 
-        egui::CentralPanel::default().show(&ctx, |ui| {
+        egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello, egui!");
             ui.label(format!("x: {}", self.x));
             ui.label(format!("sin(x): {}", self.sin_value));
@@ -160,7 +163,7 @@ impl eframe::App for EguiAppExample {
 
 pub async fn run_viewer_example() {
     let (reset_side_channel_tx, _) = tokio::sync::broadcast::channel(1);
-    let builder = EguiAppExampleBuilder::from_config(EguiAppExampleAppConfig {
+    let mut builder = EguiAppExampleBuilder::from_config(EguiAppExampleAppConfig {
         reset_side_channel_tx: reset_side_channel_tx.clone(),
     });
 
@@ -190,11 +193,11 @@ pub async fn run_viewer_example() {
         content_generator
             .outbound
             .plot_message
-            .connect(context, &mut egui_actor.inbound.msg);
+            .connect(context, &mut egui_actor.inbound.stream);
     });
 
     // The cancel_requester is used to cancel the pipeline.
-    // builder.cancel_request_sender = pipeline.cancel_request_sender_template.clone();
+    builder.cancel_request_sender = pipeline.cancel_request_sender_template.clone();
 
     // Plot the pipeline graph to the console.
     pipeline.print_flow_graph();
@@ -210,7 +213,10 @@ pub async fn run_viewer_example() {
 }
 
 // Run the egui app on the main thread.
-pub fn run_egui_app_on_man_thread<Builder: 'static, V: EguiAppFromBuilder<Builder>>(
+pub fn run_egui_app_on_man_thread<
+    Builder: 'static,
+    V: EguiAppFromBuilder<Builder, State = String>,
+>(
     builder: Builder,
 ) {
     env_logger::init();
@@ -220,7 +226,15 @@ pub fn run_egui_app_on_man_thread<Builder: 'static, V: EguiAppFromBuilder<Builde
 
         ..Default::default()
     };
-    eframe::run_native("Egui actor", options, Box::new(|_cc| V::new(builder))).unwrap();
+    eframe::run_native(
+        "Egui actor",
+        options,
+        Box::new(|_cc| {
+            let s: String = "example_state".to_owned();
+            V::new(builder, s)
+        }),
+    )
+    .unwrap();
 }
 
 fn main() {

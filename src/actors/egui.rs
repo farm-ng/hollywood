@@ -1,8 +1,8 @@
-use crate::compute::Context;
+use crate::compute::{CancelRequest, Context};
 use crate::core::*;
 use std::fmt::Debug;
 
-use self::request::{IsRequestMessage, ReplyMessage, RequestChannel, RequestMessage};
+use self::request::{IsRequestMessage, RequestMessage};
 
 /// The inbound message for the egui actor.
 #[derive(Clone, Debug, Default)]
@@ -11,7 +11,7 @@ pub struct EguiState<T: Default + Debug + Clone + Send + Sync + 'static, InReqMs
     /// Forwards messages to the egui app.
     pub forward_message: Option<std::sync::mpsc::Sender<Stream<T>>>,
     /// Forwards an incoming request to the egui app.
-    pub forward_in_request: Option<std::sync::mpsc::Sender<InReqMsg>>,
+    pub forward_request: Option<std::sync::mpsc::Sender<InReqMsg>>,
 }
 
 /// The inbound message stream.
@@ -25,108 +25,121 @@ pub struct Stream<T: Default + Debug + Clone + Send + Sync + 'static> {
 #[derive(Clone, Debug)]
 pub enum EguiInboundMessage<
     T: Default + Debug + Clone + Send + Sync + 'static,
-    InRequest: Default + Debug + Clone + Send + Sync + 'static,
-    InReply: Default + Debug + Clone + Send + Sync + 'static,
+    Request: Default + Debug + Clone + Send + Sync + 'static,
+    Reply: Default + Debug + Clone + Send + Sync + 'static,
 > {
     /// A egui message of generic type T.
     Stream(Stream<T>),
     /// A generic request message.
-    InRequest(RequestMessage<InRequest, InReply>),
+    Request(RequestMessage<Request, Reply>),
 }
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
-    > InboundMessageNew<Stream<T>> for EguiInboundMessage<T, InRequest, InReply>
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
+    > InboundMessageNew<Stream<T>> for EguiInboundMessage<T, Request, Reply>
 {
     fn new(_inbound_name: String, p: Stream<T>) -> Self {
-        EguiInboundMessage::<T, InRequest, InReply>::Stream(p)
+        EguiInboundMessage::<T, Request, Reply>::Stream(p)
     }
 }
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
-    > InboundMessageNew<RequestMessage<InRequest, InReply>>
-    for EguiInboundMessage<T, InRequest, InReply>
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
+    > InboundMessageNew<RequestMessage<Request, Reply>> for EguiInboundMessage<T, Request, Reply>
 {
-    fn new(_inbound_name: String, p: RequestMessage<InRequest, InReply>) -> Self {
-        EguiInboundMessage::<T, InRequest, InReply>::InRequest(p)
+    fn new(_inbound_name: String, p: RequestMessage<Request, Reply>) -> Self {
+        EguiInboundMessage::<T, Request, Reply>::Request(p)
     }
 }
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
-    > InboundMessage for EguiInboundMessage<T, InRequest, InReply>
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
+    > InboundMessage for EguiInboundMessage<T, Request, Reply>
 {
     type Prop = NullProp;
 
-    type State = EguiState<T, RequestMessage<InRequest, InReply>>;
+    type State = EguiState<T, RequestMessage<Request, Reply>>;
 
     type OutboundHub = NullOutbound;
 
     type RequestHub = NullRequest;
 
     fn inbound_channel(&self) -> String {
-        "msg".to_owned()
+        "stream".to_owned()
     }
 }
 
 /// The inbound hub for the egui actor.
 pub struct ViewerInbound<
     T: Default + Debug + Clone + Send + Sync + 'static,
-    InRequest: Default + Debug + Clone + Send + Sync + 'static,
-    InReply: Default + Debug + Clone + Send + Sync + 'static,
+    Request: Default + Debug + Clone + Send + Sync + 'static,
+    Reply: Default + Debug + Clone + Send + Sync + 'static,
 > {
-    /// The inbound channel for the egui actor.
-    pub msg: InboundChannel<Stream<T>, EguiInboundMessage<T, InRequest, InReply>>,
+    /// The message stream inbound channel
+    pub stream: InboundChannel<Stream<T>, EguiInboundMessage<T, Request, Reply>>,
+    /// The request inbound channel
+    pub request:
+        InboundChannel<RequestMessage<Request, Reply>, EguiInboundMessage<T, Request, Reply>>,
 }
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
     >
     InboundHub<
         NullProp,
-        EguiState<T, RequestMessage<InRequest, InReply>>,
+        EguiState<T, RequestMessage<Request, Reply>>,
         NullOutbound,
         NullRequest,
-        EguiInboundMessage<T, InRequest, InReply>,
-    > for ViewerInbound<T, InRequest, InReply>
+        EguiInboundMessage<T, Request, Reply>,
+    > for ViewerInbound<T, Request, Reply>
 {
     fn from_builder(
         builder: &mut ActorBuilder<
             NullProp,
-            EguiState<T, RequestMessage<InRequest, InReply>>,
+            EguiState<T, RequestMessage<Request, Reply>>,
             NullOutbound,
             NullRequest,
-            EguiInboundMessage<T, InRequest, InReply>,
+            EguiInboundMessage<T, Request, Reply>,
         >,
         actor_name: &str,
     ) -> Self {
-        let msg = InboundChannel::new(
-            &mut builder.context,
+        let stream = InboundChannel::new(
+            builder.context,
             actor_name,
             &builder.sender,
-            "msg".to_owned(),
+            "stream".to_owned(),
         );
         builder
             .forward
-            .insert(msg.name.clone(), Box::new(msg.clone()));
-        Self { msg }
+            .insert(stream.name.clone(), Box::new(stream.clone()));
+
+        let request = InboundChannel::new(
+            builder.context,
+            actor_name,
+            &builder.sender,
+            "in_rquest".to_owned(),
+        );
+        builder
+            .forward
+            .insert(request.name.clone(), Box::new(request.clone()));
+
+        Self { stream, request }
     }
 }
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
-    > OnMessage for EguiInboundMessage<T, InRequest, InReply>
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
+    > OnMessage for EguiInboundMessage<T, Request, Reply>
 {
     /// Forward the message to the egui app.
     fn on_message(
@@ -139,12 +152,12 @@ impl<
         match &self {
             EguiInboundMessage::Stream(new_value) => {
                 if let Some(sender) = &state.forward_message {
-                    let _ = sender.send(new_value.clone()).unwrap();
+                    sender.send(new_value.clone()).unwrap();
                 }
             }
-            EguiInboundMessage::InRequest(request) => {
-                if let Some(sender) = &state.forward_in_request {
-                    let _ = sender.send(request.clone()).unwrap();
+            EguiInboundMessage::Request(request) => {
+                if let Some(sender) = &state.forward_request {
+                    sender.send(request.clone()).unwrap();
                 }
             }
         }
@@ -154,34 +167,34 @@ impl<
 /// The egui actor.
 ///
 /// This is a generic proxy which receives messages and forwards them to the egui app.
-pub type EguiActor<T, InRequest, InReply> = Actor<
+pub type EguiActor<T, Request, Reply> = Actor<
     NullProp,
-    ViewerInbound<T, InRequest, InReply>,
-    EguiState<T, RequestMessage<InRequest, InReply>>,
+    ViewerInbound<T, Request, Reply>,
+    EguiState<T, RequestMessage<Request, Reply>>,
     NullOutbound,
     NullRequest,
 >;
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
     >
     FromPropState<
         NullProp,
-        ViewerInbound<T, InRequest, InReply>,
-        EguiState<T, RequestMessage<InRequest, InReply>>,
+        ViewerInbound<T, Request, Reply>,
+        EguiState<T, RequestMessage<Request, Reply>>,
         NullOutbound,
-        EguiInboundMessage<T, InRequest, InReply>,
+        EguiInboundMessage<T, Request, Reply>,
         NullRequest,
         DefaultRunner<
             NullProp,
-            ViewerInbound<T, InRequest, InReply>,
-            EguiState<T, RequestMessage<InRequest, InReply>>,
+            ViewerInbound<T, Request, Reply>,
+            EguiState<T, RequestMessage<Request, Reply>>,
             NullOutbound,
             NullRequest,
         >,
-    > for EguiActor<T, InRequest, InReply>
+    > for EguiActor<T, Request, Reply>
 {
     fn name_hint(_prop: &NullProp) -> String {
         "Egui".to_owned()
@@ -190,21 +203,21 @@ impl<
 
 impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
-        InRequest: Default + Debug + Clone + Send + Sync + 'static,
-        InReply: Default + Debug + Clone + Send + Sync + 'static,
-    > EguiActor<T, InRequest, InReply>
+        Request: Default + Debug + Clone + Send + Sync + 'static,
+        Reply: Default + Debug + Clone + Send + Sync + 'static,
+    > EguiActor<T, Request, Reply>
 {
     /// Create a new egui actor from the builder.
-    pub fn from_builder<Builder: EguiActorBuilder<T, RequestMessage<InRequest, InReply>>>(
+    pub fn from_builder<Builder: EguiActorBuilder<T, RequestMessage<Request, Reply>>>(
         context: &mut Context,
         builder: &Builder,
     ) -> Self {
         Self::from_prop_and_state(
             context,
             NullProp {},
-            EguiState::<T, RequestMessage<InRequest, InReply>> {
+            EguiState::<T, RequestMessage<Request, Reply>> {
                 forward_message: Some(builder.message_sender()),
-                forward_in_request: Some(builder.in_request_sender()),
+                forward_request: Some(builder.request_sender()),
             },
         )
     }
@@ -219,7 +232,7 @@ pub trait EguiActorBuilder<
     /// Returns message sender.
     fn message_sender(&self) -> std::sync::mpsc::Sender<Stream<T>>;
     /// Returns in request sender.
-    fn in_request_sender(&self) -> std::sync::mpsc::Sender<InReqMsg>;
+    fn request_sender(&self) -> std::sync::mpsc::Sender<InReqMsg>;
 }
 
 /// A generic builder for the egui actor and app.
@@ -233,9 +246,11 @@ pub struct GenericEguiBuilder<
     /// The message recv for the egui app.
     pub message_recv: std::sync::mpsc::Receiver<Stream<T>>,
     /// To forward incoming  requests to the egui app.
-    pub in_request_sender: std::sync::mpsc::Sender<InReqMsg>,
+    pub request_sender: std::sync::mpsc::Sender<InReqMsg>,
     /// The receiver for incoming requests.
-    pub in_request_recv: std::sync::mpsc::Receiver<InReqMsg>,
+    pub request_recv: std::sync::mpsc::Receiver<InReqMsg>,
+    /// Pipeline cancel request sender
+    pub cancel_request_sender: Option<tokio::sync::mpsc::Sender<CancelRequest>>,
 
     /// The config for the egui app.
     pub config: Config,
@@ -247,12 +262,14 @@ impl<T: Default + Debug + Clone + Send + Sync + 'static, InReqMsg: IsRequestMess
     /// Create a new viewer builder.
     pub fn from_config(config: Config) -> Self {
         let (sender, recv) = std::sync::mpsc::channel();
-        let (in_request_sender, in_request_recv) = std::sync::mpsc::channel();
+        let (request_sender, request_recv) = std::sync::mpsc::channel();
+
         Self {
             message_sender: sender,
             message_recv: recv,
-            in_request_sender: in_request_sender,
-            in_request_recv: in_request_recv,
+            request_sender,
+            request_recv,
+            cancel_request_sender: None,
             config,
         }
     }
@@ -265,8 +282,8 @@ impl<T: Default + Debug + Clone + Send + Sync + 'static, InReqMsg: IsRequestMess
         self.message_sender.clone()
     }
 
-    fn in_request_sender(&self) -> std::sync::mpsc::Sender<InReqMsg> {
-        self.in_request_sender.clone()
+    fn request_sender(&self) -> std::sync::mpsc::Sender<InReqMsg> {
+        self.request_sender.clone()
     }
 }
 
@@ -274,7 +291,9 @@ impl<T: Default + Debug + Clone + Send + Sync + 'static, InReqMsg: IsRequestMess
 pub trait EguiAppFromBuilder<Builder>: eframe::App {
     /// Egui app type.
     type Out: EguiAppFromBuilder<Builder> + 'static;
+    /// Gui state
+    type State;
 
     /// Create a new egui app from the builder.
-    fn new(builder: Builder) -> Box<Self::Out>;
+    fn new(builder: Builder, init_state: Self::State) -> Box<Self::Out>;
 }
