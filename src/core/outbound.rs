@@ -36,10 +36,11 @@ pub struct OutboundChannel<T> {
     pub name: String,
     /// Name of the actor that sends the outbound messages.
     pub actor_name: String,
-    pub(crate) connection_register: ConnectionEnum<T>,
+    /// register
+    pub connection_register: ConnectionEnum<T>,
 }
 
-impl<OutT: Default + Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT> {
+impl<OutT: Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT> {
     /// Create a new outbound for actor in provided context.    
     pub fn new(context: &mut Context, name: String, actor_name: &str) -> Self {
         context.assert_unique_outbound_name(name.clone(), actor_name);
@@ -137,7 +138,9 @@ impl<Out, InT, M: InboundMessage> Debug for OutboundConnectionWithAdapter<Out, I
     }
 }
 
-pub(crate) trait GenericConnection<T>: Send + Sync {
+/// Generic connection trait
+pub trait GenericConnection<T>: Send + Sync {
+    /// Send a message to the connected inbound channels to other actors.
     fn send_impl(&self, msg: T);
 }
 

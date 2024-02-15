@@ -4,9 +4,13 @@ use crate::core::{outbound::GenericConnection, Activate};
 
 use super::{ConnectionEnum, ConnectionRegister};
 
-pub(crate) struct ConnectionConfig<T> {
+/// Connection configuration
+pub struct ConnectionConfig<T> {
+    /// List of connections
     pub connection_register: ConnectionRegister<T>,
+    /// Launch pad for new connections
     pub maybe_register_launch_pad: Option<tokio::sync::oneshot::Sender<ConnectionRegister<T>>>,
+    /// Landing pad for new connections
     pub maybe_register_landing_pad: Option<tokio::sync::oneshot::Receiver<ConnectionRegister<T>>>,
 }
 
@@ -22,6 +26,7 @@ impl<T> Drop for ConnectionConfig<T> {
 }
 
 impl<T> ConnectionConfig<T> {
+    /// 
     pub fn new() -> Self {
         let (connection_launch_pad, connection_landing_pad) = tokio::sync::oneshot::channel();
         Self {
@@ -32,16 +37,21 @@ impl<T> ConnectionConfig<T> {
     }
 }
 
-pub(crate) struct ActiveConnection<T> {
+/// Active connection
+pub struct ActiveConnection<T> {
+    /// List of connections
     pub maybe_registers: Option<ConnectionRegister<T>>,
+    /// Landing pad for new connections
     pub maybe_register_landing_pad: Option<tokio::sync::oneshot::Receiver<ConnectionRegister<T>>>,
 }
 
 impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnum<T> {
+    /// new connection
     pub fn new() -> Self {
         Self::Config(ConnectionConfig::new())
     }
 
+    /// push connection
     pub fn push(&mut self, connection: Arc<dyn GenericConnection<T> + Send + Sync>) {
         match self {
             Self::Config(config) => {

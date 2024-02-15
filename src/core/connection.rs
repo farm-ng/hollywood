@@ -21,8 +21,11 @@ pub mod request_connection;
 
 type ConnectionRegister<T> = Vec<Arc<dyn GenericConnection<T> + Send + Sync>>;
 
-pub(crate) enum ConnectionEnum<T> {
+/// Connection 
+pub enum ConnectionEnum<T> {
+    /// Configuration of the connection
     Config(ConnectionConfig<T>),
+    /// Active connection
     Active(ActiveConnection<T>),
 }
 
