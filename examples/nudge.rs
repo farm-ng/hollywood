@@ -1,5 +1,6 @@
 use hollywood::actors::printer::PrinterProp;
-use hollywood::actors::{Nudge, Printer};
+use hollywood::actors::Nudge;
+use hollywood::actors::Printer;
 use hollywood::compute::Context;
 use hollywood::core::*;
 

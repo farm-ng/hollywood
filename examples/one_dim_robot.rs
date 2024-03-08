@@ -9,9 +9,13 @@ use hollywood::core::*;
 
 use hollywood::example_actors::one_dim_robot::draw::DrawState;
 use hollywood::example_actors::one_dim_robot::filter::FilterState;
-use hollywood::example_actors::one_dim_robot::{
-    DrawActor, Filter, NamedFilterState, Robot, Sim, SimState, Stamped,
-};
+use hollywood::example_actors::one_dim_robot::DrawActor;
+use hollywood::example_actors::one_dim_robot::Filter;
+use hollywood::example_actors::one_dim_robot::NamedFilterState;
+use hollywood::example_actors::one_dim_robot::Robot;
+use hollywood::example_actors::one_dim_robot::Sim;
+use hollywood::example_actors::one_dim_robot::SimState;
+use hollywood::example_actors::one_dim_robot::Stamped;
 
 async fn run_robot_example() {
     let pipeline = Context::configure(&mut |context| {

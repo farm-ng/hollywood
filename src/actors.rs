@@ -4,7 +4,8 @@ pub use periodic::Periodic;
 
 /// Generic printer actor.
 pub mod printer;
-pub use printer::{Printer, PrinterProp};
+pub use printer::Printer;
+pub use printer::PrinterProp;
 
 /// Nudge actor.
 pub mod nudge;

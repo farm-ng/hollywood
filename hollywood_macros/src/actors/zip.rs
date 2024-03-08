@@ -1,6 +1,11 @@
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
-use syn::{parse::Parse, parse::ParseStream, parse2, LitInt, Result};
+use quote::format_ident;
+use quote::quote;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::parse2;
+use syn::LitInt;
+use syn::Result;
 
 struct ZipInput {
     num_fields: usize,
@@ -156,9 +161,9 @@ pub(crate) fn zip_state_n_impl(input: TokenStream) -> TokenStream {
         let heap_item = format_ident!("item{}_heap", i);
         let item = format_ident!("Item{}", i); // Corrected this line
         let pair = quote! { ZipPair<#i, Key, #item> };
-        quote! { 
+        quote! {
             /// Heap for the Xth inbound channel.
-            pub #heap_item: std::collections::BinaryHeap<std::cmp::Reverse<#pair>> 
+            pub #heap_item: std::collections::BinaryHeap<std::cmp::Reverse<#pair>>
         }
     });
 
@@ -245,7 +250,7 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
             Key: Ord + Clone + Debug + Sync + Send + 'static,
             #( #type_with_bounds_seq ),*
         > {
-            #(  
+            #(
                 /// Inbound message for the Xth inbound channel.
                 #type_seq(ZipPair<#i_seq, Key, #type_seq>)
             ),*
@@ -406,9 +411,9 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
                  + Sync + Send + 'static,
             #( #type_with_bounds_seq ),*
         > {
-            #( 
+            #(
                 /// Inbound channel for the Xth inbound channel.
-                pub #item_seq5: #channel 
+                pub #item_seq5: #channel
             ),*
         }
 

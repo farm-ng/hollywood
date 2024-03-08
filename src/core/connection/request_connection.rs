@@ -1,10 +1,14 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 use tokio::sync::mpsc::error::SendError;
 
-use crate::core::{Activate, InboundMessage, InboundMessageNew};
+use crate::core::Activate;
+use crate::core::InboundMessage;
+use crate::core::InboundMessageNew;
 
-use super::{RequestConnectionEnum, RequestConnectionRegister};
+use super::RequestConnectionEnum;
+use super::RequestConnectionRegister;
 
 pub(crate) trait GenericRequestConnection<T>: Send + Sync {
     fn send_impl(&self, msg: T);

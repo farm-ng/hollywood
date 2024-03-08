@@ -1,5 +1,6 @@
 use hollywood::actors::printer::PrinterProp;
-use hollywood::actors::{Periodic, Printer};
+use hollywood::actors::Periodic;
+use hollywood::actors::Printer;
 use hollywood::compute::Context;
 use hollywood::core::*;
 

@@ -1,9 +1,13 @@
 use std::mem::swap;
 
-use crate::compute::{Context, Topology};
-use crate::core::{
-    ActorNode, InboundMessage, InboundMessageNew, NullOutbound, NullProp, NullState,
-};
+use crate::compute::Context;
+use crate::compute::Topology;
+use crate::core::ActorNode;
+use crate::core::InboundMessage;
+use crate::core::InboundMessageNew;
+use crate::core::NullOutbound;
+use crate::core::NullProp;
+use crate::core::NullState;
 
 /// Message to request stop execution of the compute pipeline.
 #[derive(Debug, Clone)]

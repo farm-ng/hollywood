@@ -1,8 +1,10 @@
-use crate::compute::{CancelRequest, Context};
+use crate::compute::CancelRequest;
+use crate::compute::Context;
 use crate::core::*;
 use std::fmt::Debug;
 
-use self::request::{IsRequestMessage, RequestMessage};
+use self::request::IsRequestMessage;
+use self::request::RequestMessage;
 
 /// The inbound message for the egui actor.
 #[derive(Clone, Debug, Default)]

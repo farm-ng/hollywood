@@ -1,10 +1,15 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
+use std::collections::VecDeque;
 
-use drawille::{Canvas, PixelColor};
+use drawille::Canvas;
+use drawille::PixelColor;
 use grid::Grid;
-use rand_distr::num_traits::{self, FromPrimitive, ToPrimitive};
+use rand_distr::num_traits::FromPrimitive;
+use rand_distr::num_traits::ToPrimitive;
+use rand_distr::num_traits::{self};
 
-use crate::compute::{ActorNode, Topology};
+use crate::compute::ActorNode;
+use crate::compute::Topology;
 
 /// A super node is an actor with its inbound and outbound channels.
 pub(crate) struct FlowSuperNode {

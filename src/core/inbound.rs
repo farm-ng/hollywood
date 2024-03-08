@@ -1,7 +1,9 @@
 use crate::compute::context::Context;
-use crate::core::{actor_builder::ActorBuilder, outbound::OutboundHub};
+use crate::core::actor_builder::ActorBuilder;
+use crate::core::outbound::OutboundHub;
 
-use super::request::{NullRequest, RequestHub};
+use super::request::NullRequest;
+use super::request::RequestHub;
 
 /// The inbound hub is a collection of inbound channels.
 pub trait InboundHub<Prop, State, OutboundHub, Request: RequestHub<M>, M: InboundMessage>:

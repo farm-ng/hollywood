@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use hollywood::actors::egui::{
-    EguiActor, EguiAppFromBuilder, GenericEguiBuilder, Stream,
-};
+use hollywood::actors::egui::EguiActor;
+use hollywood::actors::egui::EguiAppFromBuilder;
+use hollywood::actors::egui::GenericEguiBuilder;
+use hollywood::actors::egui::Stream;
 use hollywood::compute::Context;
 use hollywood::core::request::RequestMessage;
 use hollywood::core::*;

@@ -1,10 +1,23 @@
-use convert_case::{Case, Casing};
+use convert_case::Case;
+use convert_case::Casing;
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{
-    parse::Parse, parse::ParseStream, parse2, Error, Fields, Generics, Ident, Item, ItemEnum,
-    ItemStruct, Path, PathArguments, Result, Token, Type, TypePath,
-};
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::parse2;
+use syn::Error;
+use syn::Fields;
+use syn::Generics;
+use syn::Ident;
+use syn::Item;
+use syn::ItemEnum;
+use syn::ItemStruct;
+use syn::Path;
+use syn::PathArguments;
+use syn::Result;
+use syn::Token;
+use syn::Type;
+use syn::TypePath;
 
 /// Documentation is in the hollywood crate.
 pub(crate) fn actor_outputs_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -142,7 +155,9 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
         }
     });
 
-    let field0 = fields.first().expect("Request struct must have at least one field");
+    let field0 = fields
+        .first()
+        .expect("Request struct must have at least one field");
     let m_type = is_request_type(&field0.ty).unwrap()[2];
 
     let gen = quote! {

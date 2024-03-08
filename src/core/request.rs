@@ -1,11 +1,15 @@
 use std::fmt::Debug;
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 use crate::compute::Context;
 
 use super::connection::request_connection::RequestConnection;
 use super::connection::RequestConnectionEnum;
-use super::{Activate, InboundChannel, InboundMessage, InboundMessageNew};
+use super::Activate;
+use super::InboundChannel;
+use super::InboundMessage;
+use super::InboundMessageNew;
 
 /// A request hub is used to send requests to other actors which will reply later.
 pub trait RequestHub<M: InboundMessage>: Send + Sync + 'static + Activate {

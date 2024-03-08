@@ -1,8 +1,14 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::compute::{CancelRequest, Pipeline, Topology};
-use crate::core::{ActorNode, InboundChannel, InboundMessage, OutboundChannel, OutboundConnection};
+use crate::compute::CancelRequest;
+use crate::compute::Pipeline;
+use crate::compute::Topology;
+use crate::core::ActorNode;
+use crate::core::InboundChannel;
+use crate::core::InboundMessage;
+use crate::core::OutboundChannel;
+use crate::core::OutboundConnection;
 
 /// The context of the compute graph which is used to configure the network topology.
 ///

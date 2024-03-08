@@ -2,10 +2,10 @@ use std::collections::BTreeSet;
 
 use petgraph::stable_graph::StableDiGraph;
 
-use crate::{
-    core::{InboundChannel, InboundMessage, OutboundChannel},
-    introspect::flow_graph::FlowGraph,
-};
+use crate::core::InboundChannel;
+use crate::core::InboundMessage;
+use crate::core::OutboundChannel;
+use crate::introspect::flow_graph::FlowGraph;
 
 // A node in a compute graph.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]

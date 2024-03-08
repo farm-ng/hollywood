@@ -1,4 +1,5 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
+use std::fmt::Display;
 
 /// A generic value with a timestamp.
 #[derive(Clone, Debug, Default)]

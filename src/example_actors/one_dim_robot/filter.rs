@@ -1,13 +1,27 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
+use std::fmt::Display;
 
 use crate::compute::Context;
-use crate::core::request::{NullRequest, RequestMessage};
-use crate::core::{
-    Activate, Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub,
-    InboundMessage, InboundMessageNew, NullProp, OnMessage, OutboundChannel, OutboundHub,
-};
-use crate::example_actors::one_dim_robot::{RangeMeasurementModel, Stamped};
-use hollywood_macros::{actor, actor_inputs, actor_outputs};
+use crate::core::request::NullRequest;
+use crate::core::request::RequestMessage;
+use crate::core::Activate;
+use crate::core::Actor;
+use crate::core::ActorBuilder;
+use crate::core::DefaultRunner;
+use crate::core::FromPropState;
+use crate::core::InboundChannel;
+use crate::core::InboundHub;
+use crate::core::InboundMessage;
+use crate::core::InboundMessageNew;
+use crate::core::NullProp;
+use crate::core::OnMessage;
+use crate::core::OutboundChannel;
+use crate::core::OutboundHub;
+use crate::example_actors::one_dim_robot::RangeMeasurementModel;
+use crate::example_actors::one_dim_robot::Stamped;
+use hollywood_macros::actor;
+use hollywood_macros::actor_inputs;
+use hollywood_macros::actor_outputs;
 
 use super::sim::PingPong;
 

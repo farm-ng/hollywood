@@ -1,11 +1,20 @@
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
+use std::fmt::Display;
 
 use hollywood_macros::actor_inputs;
 
-use crate::core::{
-    request::NullRequest, Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel,
-    InboundHub, InboundMessage, InboundMessageNew, NullOutbound, NullState, OnMessage,
-};
+use crate::core::request::NullRequest;
+use crate::core::Actor;
+use crate::core::ActorBuilder;
+use crate::core::DefaultRunner;
+use crate::core::FromPropState;
+use crate::core::InboundChannel;
+use crate::core::InboundHub;
+use crate::core::InboundMessage;
+use crate::core::InboundMessageNew;
+use crate::core::NullOutbound;
+use crate::core::NullState;
+use crate::core::OnMessage;
 
 /// Configuration properties for the printer actor.
 #[derive(Clone, Debug)]

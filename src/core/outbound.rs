@@ -1,10 +1,14 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
+use std::sync::Arc;
 use tokio::sync::mpsc::error::SendError;
 
 use super::connection::ConnectionEnum;
 use crate::compute::context::Context;
-use crate::core::inbound::{InboundChannel, InboundMessage, InboundMessageNew};
-use std::fmt::{Debug, Formatter};
+use crate::core::inbound::InboundChannel;
+use crate::core::inbound::InboundMessage;
+use crate::core::inbound::InboundMessageNew;
+use std::fmt::Debug;
+use std::fmt::Formatter;
 
 /// OutboundHub is a collection of outbound channels for the actor.
 pub trait OutboundHub: Send + Sync + 'static + Activate {
@@ -70,7 +74,7 @@ impl<OutT: Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT
     /// Connect the outbound channel of type OutT to the inbound channel of another type InT.
     /// The user provided adapter function is used to convert from OutT to InT.
     pub fn connect_with_adapter<
-        InT: Default + Clone + Send + Sync + std::fmt::Debug + 'static,
+        InT: Clone + Send + Sync + std::fmt::Debug + 'static,
         M: InboundMessageNew<InT>,
     >(
         &mut self,

@@ -4,7 +4,9 @@ use crate::core::InboundMessageNew;
 use crate::core::NullOutbound;
 use crate::core::OnMessage;
 use crate::core::*;
-use crate::example_actors::one_dim_robot::{NamedFilterState, Robot, Stamped};
+use crate::example_actors::one_dim_robot::NamedFilterState;
+use crate::example_actors::one_dim_robot::Robot;
+use crate::example_actors::one_dim_robot::Stamped;
 use crate::macros::*;
 use drawille::Canvas;
 

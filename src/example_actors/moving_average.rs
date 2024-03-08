@@ -3,15 +3,22 @@ use crate::macros::*;
 // needed for actor_outputs macro
 pub use crate::compute::Context;
 use crate::core::request::NullRequest;
-pub use crate::core::{Activate, OutboundChannel, OutboundHub};
+pub use crate::core::Activate;
+pub use crate::core::OutboundChannel;
+pub use crate::core::OutboundHub;
 
 // needed for actor_inputs macro
-pub use crate::core::{
-    ActorBuilder, InboundChannel, InboundHub, InboundMessage, InboundMessageNew, OnMessage,
-};
+pub use crate::core::ActorBuilder;
+pub use crate::core::InboundChannel;
+pub use crate::core::InboundHub;
+pub use crate::core::InboundMessage;
+pub use crate::core::InboundMessageNew;
+pub use crate::core::OnMessage;
 
 // needed for actor macro
-pub use crate::core::{Actor, DefaultRunner, FromPropState};
+pub use crate::core::Actor;
+pub use crate::core::DefaultRunner;
+pub use crate::core::FromPropState;
 
 /// Outbound hub for the MovingAverage.
 #[actor_outputs]

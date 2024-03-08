@@ -1,14 +1,28 @@
 use std::fmt::Debug;
 
-use rand_distr::{Distribution, Normal};
+use rand_distr::Distribution;
+use rand_distr::Normal;
 
 use crate::compute::Context;
-use crate::core::request::{ReplyMessage, RequestChannel, RequestHub};
-use crate::core::{
-    Activate, Actor, ActorBuilder, DefaultRunner, FromPropState, InboundChannel, InboundHub,
-    InboundMessage, InboundMessageNew, NullProp, OnMessage, OutboundChannel, OutboundHub,
-};
-use crate::example_actors::one_dim_robot::{RangeMeasurementModel, Robot, Stamped};
+use crate::core::request::ReplyMessage;
+use crate::core::request::RequestChannel;
+use crate::core::request::RequestHub;
+use crate::core::Activate;
+use crate::core::Actor;
+use crate::core::ActorBuilder;
+use crate::core::DefaultRunner;
+use crate::core::FromPropState;
+use crate::core::InboundChannel;
+use crate::core::InboundHub;
+use crate::core::InboundMessage;
+use crate::core::InboundMessageNew;
+use crate::core::NullProp;
+use crate::core::OnMessage;
+use crate::core::OutboundChannel;
+use crate::core::OutboundHub;
+use crate::example_actors::one_dim_robot::RangeMeasurementModel;
+use crate::example_actors::one_dim_robot::Robot;
+use crate::example_actors::one_dim_robot::Stamped;
 use crate::macros::*;
 
 /// Ping-pong request message.

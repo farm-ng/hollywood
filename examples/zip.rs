@@ -1,6 +1,10 @@
+use hollywood::actors::periodic;
 use hollywood::actors::printer::PrinterProp;
-use hollywood::actors::zip::{Tuple2, Zip2State, ZipPair};
-use hollywood::actors::{periodic, Printer, Zip2};
+use hollywood::actors::zip::Tuple2;
+use hollywood::actors::zip::Zip2State;
+use hollywood::actors::zip::ZipPair;
+use hollywood::actors::Printer;
+use hollywood::actors::Zip2;
 use hollywood::compute::Context;
 use hollywood::core::*;
 

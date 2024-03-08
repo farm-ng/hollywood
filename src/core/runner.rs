@@ -1,13 +1,11 @@
-use crate::core::{
-    inbound::{InboundHub, InboundMessage},
-    outbound::OutboundHub,
-};
+use crate::core::inbound::InboundHub;
+use crate::core::inbound::InboundMessage;
+use crate::core::outbound::OutboundHub;
 
-use super::{
-    actor::{ActorNodeImpl, ForwardTable},
-    request::RequestHub,
-    ActorNode,
-};
+use super::actor::ActorNodeImpl;
+use super::actor::ForwardTable;
+use super::request::RequestHub;
+use super::ActorNode;
 
 /// Runner executes the pipeline.
 pub trait Runner<

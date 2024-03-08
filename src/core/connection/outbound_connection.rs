@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
-use crate::core::{outbound::GenericConnection, Activate};
+use crate::core::outbound::GenericConnection;
+use crate::core::Activate;
 
-use super::{ConnectionEnum, ConnectionRegister};
+use super::ConnectionEnum;
+use super::ConnectionRegister;
 
 /// Connection configuration
 pub struct ConnectionConfig<T> {
@@ -26,7 +28,7 @@ impl<T> Drop for ConnectionConfig<T> {
 }
 
 impl<T> ConnectionConfig<T> {
-    /// 
+    ///
     pub fn new() -> Self {
         let (connection_launch_pad, connection_landing_pad) = tokio::sync::oneshot::channel();
         Self {

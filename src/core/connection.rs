@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use self::{
-    outbound_connection::{ActiveConnection, ConnectionConfig},
-    request_connection::{
-        ActiveRequestConnection, GenericRequestConnection, RequestConnectionConfig,
-    },
-};
+use self::outbound_connection::ActiveConnection;
+use self::outbound_connection::ConnectionConfig;
+use self::request_connection::ActiveRequestConnection;
+use self::request_connection::GenericRequestConnection;
+use self::request_connection::RequestConnectionConfig;
 
 use super::outbound::GenericConnection;
 
@@ -21,7 +20,7 @@ pub mod request_connection;
 
 type ConnectionRegister<T> = Vec<Arc<dyn GenericConnection<T> + Send + Sync>>;
 
-/// Connection 
+/// Connection
 pub enum ConnectionEnum<T> {
     /// Configuration of the connection
     Config(ConnectionConfig<T>),
