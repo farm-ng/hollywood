@@ -1,26 +1,22 @@
+use super::connection::ConnectionEnum;
+use crate::prelude::*;
+use std::fmt::Debug;
+use std::fmt::Formatter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::SendError;
 
-use super::connection::ConnectionEnum;
-use crate::compute::context::Context;
-use crate::core::inbound::InboundChannel;
-use crate::core::inbound::InboundMessage;
-use crate::core::inbound::InboundMessageNew;
-use std::fmt::Debug;
-use std::fmt::Formatter;
-
-/// OutboundHub is a collection of outbound channels for the actor.
-pub trait OutboundHub: Send + Sync + 'static + Activate {
-    /// Creates the OutboundHub from context and the actor name.
-    fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self;
+/// IsOutboundHub is a collection of outbound channels for the actor.
+pub trait IsOutboundHub: Send + Sync + 'static + HasActivate {
+    /// Creates the IsOutboundHub from context and the actor name.
+    fn from_context_and_parent(context: &mut Hollywood, actor_name: &str) -> Self;
 }
 
 /// An empty outbound hub - used for actors that do not have any outbound channels.
 #[derive(Debug, Clone)]
 pub struct NullOutbound {}
 
-impl Activate for NullOutbound {
+impl HasActivate for NullOutbound {
     fn extract(&mut self) -> Self {
         Self {}
     }
@@ -28,8 +24,8 @@ impl Activate for NullOutbound {
     fn activate(&mut self) {}
 }
 
-impl OutboundHub for NullOutbound {
-    fn from_context_and_parent(_context: &mut Context, _actor_name: &str) -> Self {
+impl IsOutboundHub for NullOutbound {
+    fn from_context_and_parent(_context: &mut Hollywood, _actor_name: &str) -> Self {
         Self {}
     }
 }
@@ -46,7 +42,7 @@ pub struct OutboundChannel<T> {
 
 impl<OutT: Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT> {
     /// Create a new outbound for actor in provided context.    
-    pub fn new(context: &mut Context, name: String, actor_name: &str) -> Self {
+    pub fn new(context: &mut Hollywood, name: String, actor_name: &str) -> Self {
         context.assert_unique_outbound_name(name.clone(), actor_name);
 
         Self {
@@ -57,9 +53,9 @@ impl<OutT: Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT
     }
 
     /// Connect the outbound channel from this actor to the inbound channel of another actor.
-    pub fn connect<M: InboundMessageNew<OutT>>(
+    pub fn connect<M: IsInboundMessageNew<OutT>>(
         &mut self,
-        ctx: &mut Context,
+        ctx: &mut Hollywood,
         inbound: &mut InboundChannel<OutT, M>,
     ) {
         ctx.connect_impl(self, inbound);
@@ -75,10 +71,10 @@ impl<OutT: Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT
     /// The user provided adapter function is used to convert from OutT to InT.
     pub fn connect_with_adapter<
         InT: Clone + Send + Sync + std::fmt::Debug + 'static,
-        M: InboundMessageNew<InT>,
+        M: IsInboundMessageNew<InT>,
     >(
         &mut self,
-        ctx: &mut Context,
+        ctx: &mut Hollywood,
         adapter: fn(OutT) -> InT,
         inbound: &mut InboundChannel<InT, M>,
     ) {
@@ -98,7 +94,7 @@ impl<OutT: Clone + Send + Sync + std::fmt::Debug + 'static> OutboundChannel<OutT
 }
 
 /// Outbound/request channel activation
-pub trait Activate {
+pub trait HasActivate {
     /// Extract outbound/request channel and returns it.
     fn extract(&mut self) -> Self;
 
@@ -106,7 +102,7 @@ pub trait Activate {
     fn activate(&mut self);
 }
 
-impl<T> Activate for OutboundChannel<T> {
+impl<T> HasActivate for OutboundChannel<T> {
     fn activate(&mut self) {
         self.connection_register.activate();
     }
@@ -121,20 +117,20 @@ impl<T> Activate for OutboundChannel<T> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct OutboundConnection<Out, M: InboundMessage> {
+pub(crate) struct OutboundConnection<Out, M: IsInboundMessage> {
     pub(crate) sender: tokio::sync::mpsc::Sender<M>,
     pub(crate) inbound_channel: String,
     pub(crate) phantom: std::marker::PhantomData<Out>,
 }
 
 #[derive(Clone)]
-pub(crate) struct OutboundConnectionWithAdapter<Out, InT, M: InboundMessage> {
+pub(crate) struct OutboundConnectionWithAdapter<Out, InT, M: IsInboundMessage> {
     pub(crate) sender: tokio::sync::mpsc::Sender<M>,
     pub(crate) inbound_channel: String,
     pub(crate) adapter: fn(Out) -> InT,
 }
 
-impl<Out, InT, M: InboundMessage> Debug for OutboundConnectionWithAdapter<Out, InT, M> {
+impl<Out, InT, M: IsInboundMessage> Debug for OutboundConnectionWithAdapter<Out, InT, M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OutboundConnection")
             .field("inbound_channel", &self.inbound_channel)
@@ -143,12 +139,12 @@ impl<Out, InT, M: InboundMessage> Debug for OutboundConnectionWithAdapter<Out, I
 }
 
 /// Generic connection trait
-pub trait GenericConnection<T>: Send + Sync {
+pub trait IsGenericConnection<T>: Send + Sync {
     /// Send a message to the connected inbound channels to other actors.
     fn send_impl(&self, msg: T);
 }
 
-impl<Out: Send + Sync, M: InboundMessageNew<Out>> GenericConnection<Out>
+impl<Out: Send + Sync, M: IsInboundMessageNew<Out>> IsGenericConnection<Out>
     for OutboundConnection<Out, M>
 {
     fn send_impl(&self, msg: Out) {
@@ -166,7 +162,7 @@ impl<Out: Send + Sync, M: InboundMessageNew<Out>> GenericConnection<Out>
     }
 }
 
-impl<Out: Send + Sync, InT, M: InboundMessageNew<InT>> GenericConnection<Out>
+impl<Out: Send + Sync, InT, M: IsInboundMessageNew<InT>> IsGenericConnection<Out>
     for OutboundConnectionWithAdapter<Out, InT, M>
 {
     fn send_impl(&self, msg: Out) {

@@ -1,27 +1,12 @@
-use std::fmt::Debug;
-use std::fmt::Display;
-
-use crate::compute::Context;
-use crate::core::request::NullRequest;
-use crate::core::request::RequestMessage;
-use crate::core::Activate;
-use crate::core::Actor;
-use crate::core::ActorBuilder;
-use crate::core::DefaultRunner;
-use crate::core::FromPropState;
-use crate::core::InboundChannel;
-use crate::core::InboundHub;
-use crate::core::InboundMessage;
-use crate::core::InboundMessageNew;
-use crate::core::NullProp;
-use crate::core::OnMessage;
-use crate::core::OutboundChannel;
-use crate::core::OutboundHub;
 use crate::example_actors::one_dim_robot::RangeMeasurementModel;
 use crate::example_actors::one_dim_robot::Stamped;
+use crate::prelude::*;
+use crate::RequestMessage;
 use hollywood_macros::actor;
 use hollywood_macros::actor_inputs;
 use hollywood_macros::actor_outputs;
+use std::fmt::Debug;
+use std::fmt::Display;
 
 use super::sim::PingPong;
 
@@ -40,7 +25,7 @@ pub enum FilterInboundMessage {
 #[actor(FilterInboundMessage)]
 type Filter = Actor<NullProp, FilterInbound, FilterState, FilterOutbound, NullRequest>;
 
-impl OnMessage for FilterInboundMessage {
+impl HasOnMessage for FilterInboundMessage {
     /// Process the inbound message NoisyVelocity or NoisyRange.
     ///
     /// On NoisyVelocity, FilterState::prediction is called.
@@ -69,7 +54,7 @@ impl OnMessage for FilterInboundMessage {
     }
 }
 
-impl InboundMessageNew<Stamped<f64>> for FilterInboundMessage {
+impl IsInboundMessageNew<Stamped<f64>> for FilterInboundMessage {
     fn new(inbound_channel: String, msg: Stamped<f64>) -> Self {
         if inbound_channel == "NoisyRange" {
             FilterInboundMessage::NoisyRange(msg)
@@ -79,7 +64,7 @@ impl InboundMessageNew<Stamped<f64>> for FilterInboundMessage {
     }
 }
 
-impl InboundMessageNew<RequestMessage<f64, PingPong>> for FilterInboundMessage {
+impl IsInboundMessageNew<RequestMessage<f64, PingPong>> for FilterInboundMessage {
     fn new(_inbound_channel: String, request: RequestMessage<f64, PingPong>) -> Self {
         FilterInboundMessage::PingPongRequest(request)
     }

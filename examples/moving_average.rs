@@ -1,17 +1,14 @@
 use hollywood::actors::printer::PrinterProp;
 use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
-use hollywood::compute::Context;
-use hollywood::core::FromPropState;
-use hollywood::core::NullState;
-
 use hollywood::example_actors::moving_average::MovingAverage;
 use hollywood::example_actors::moving_average::MovingAverageProp;
 use hollywood::example_actors::moving_average::MovingAverageState;
+use hollywood::prelude::*;
 
-///
+/// Run the moving average example
 pub async fn run_moving_average_example() {
-    let pipeline = Context::configure(&mut |context| {
+    let pipeline = Hollywood::configure(&mut |context| {
         let mut timer = Periodic::new_with_period(context, 1.0);
         let mut moving_average = MovingAverage::from_prop_and_state(
             context,

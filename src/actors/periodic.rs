@@ -1,21 +1,9 @@
-use std::sync::Arc;
-
-use async_trait::async_trait;
-
-use crate::compute::context::Context;
 use crate::core::connection::ConnectionEnum;
-
-use crate::core::actor::ActorNode;
-use crate::core::actor::FromPropState;
-use crate::core::actor::GenericActor;
-use crate::core::inbound::ForwardMessage;
-use crate::core::inbound::NullInbound;
-use crate::core::inbound::NullMessage;
-use crate::core::outbound::Activate;
-use crate::core::outbound::OutboundChannel;
-use crate::core::outbound::OutboundHub;
-use crate::core::request::NullRequest;
-use crate::core::runner::Runner;
+use crate::prelude::*;
+use crate::GenericActor;
+use crate::Runner;
+use async_trait::async_trait;
+use std::sync::Arc;
 
 /// A periodic actor.
 ///
@@ -31,7 +19,7 @@ pub type Periodic = GenericActor<
 
 impl Periodic {
     /// Create a new periodic actor, with a period of `period` seconds.
-    pub fn new_with_period(context: &mut Context, period: f64) -> Periodic {
+    pub fn new_with_period(context: &mut Hollywood, period: f64) -> Periodic {
         Periodic::from_prop_and_state(
             context,
             PeriodicProp {
@@ -47,7 +35,7 @@ impl Periodic {
 }
 
 impl
-    FromPropState<
+    HasFromPropState<
         PeriodicProp,
         NullInbound,
         PeriodicState,
@@ -101,7 +89,7 @@ pub struct PeriodicOutbound {
     pub time_stamp: OutboundChannel<f64>,
 }
 
-impl Activate for PeriodicOutbound {
+impl HasActivate for PeriodicOutbound {
     fn extract(&mut self) -> Self {
         Self {
             time_stamp: self.time_stamp.extract(),
@@ -113,8 +101,8 @@ impl Activate for PeriodicOutbound {
     }
 }
 
-impl OutboundHub for PeriodicOutbound {
-    fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self {
+impl IsOutboundHub for PeriodicOutbound {
+    fn from_context_and_parent(context: &mut Hollywood, actor_name: &str) -> Self {
         Self {
             time_stamp: OutboundChannel::<f64>::new(context, "time_stamp".to_owned(), actor_name),
         }
@@ -145,7 +133,7 @@ impl
         _forward: std::collections::HashMap<
             String,
             Box<
-                dyn ForwardMessage<
+                dyn HasForwardMessage<
                         PeriodicProp,
                         PeriodicState,
                         PeriodicOutbound,
@@ -157,7 +145,7 @@ impl
         >,
         outbound: PeriodicOutbound,
         _request: NullRequest,
-    ) -> Box<dyn ActorNode + Send + Sync> {
+    ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(PeriodicActor {
             name: name.clone(),
             prop,
@@ -178,7 +166,7 @@ pub struct PeriodicActor {
 }
 
 #[async_trait]
-impl ActorNode for PeriodicActor {
+impl IsActorNode for PeriodicActor {
     fn name(&self) -> &String {
         &self.name
     }

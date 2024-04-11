@@ -67,15 +67,15 @@ pub(crate) fn actor_outputs_impl(_attr: TokenStream, item: TokenStream) -> Token
     });
 
     let gen = quote! {
-        impl #impl_generics OutboundHub for #struct_name #ty_generics #where_clause {
-            fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self {
+        impl #impl_generics IsOutboundHub for #struct_name #ty_generics #where_clause {
+            fn from_context_and_parent(context: &mut Hollywood, actor_name: &str) -> Self {
                 Self {
                     #(#output_assignments),*
                 }
             }
         }
 
-        impl #impl_generics Activate for #struct_name #ty_generics #where_clause {
+        impl #impl_generics HasActivate for #struct_name #ty_generics #where_clause {
             fn extract(&mut self) -> Self {
                 Self {
                     #(#output_extract),*
@@ -161,7 +161,7 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
     let m_type = is_request_type(&field0.ty).unwrap()[2];
 
     let gen = quote! {
-        impl #impl_generics RequestHub<#m_type> for #struct_name #ty_generics #where_clause {
+        impl #impl_generics IsRequestHub<#m_type> for #struct_name #ty_generics #where_clause {
             fn from_parent_and_sender(
                 actor_name: &str, sender: &tokio::sync::mpsc::Sender<#m_type>
             ) -> Self {
@@ -171,7 +171,7 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
             }
         }
 
-        impl #impl_generics Activate for #struct_name #ty_generics #where_clause {
+        impl #impl_generics HasActivate for #struct_name #ty_generics #where_clause {
             fn extract(&mut self) -> Self {
                 Self {
                     #(#request_extract),*
@@ -324,7 +324,7 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
             #(#inbound),*
         }
 
-        impl #impl_generics InboundMessage for #name #ty_generics #where_clause {
+        impl #impl_generics IsInboundMessage for #name #ty_generics #where_clause {
             type Prop = #prop_type;
             type State = #state_type;
             type OutboundHub = #output_type;
@@ -337,7 +337,7 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
             }
         }
 
-        impl #impl_generics InboundHub<
+        impl #impl_generics IsInboundHub<
             #prop_type,
             #state_type,
             #output_type,
@@ -493,7 +493,7 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
         #( #attrs )*
         pub type #actor_name = Actor<#prop, #inbound, #state_type, #out, #requests>;
 
-        impl FromPropState<
+        impl HasFromPropState<
                 #prop, #inbound, #state_type, #out, #message_type, #requests, #runner_type
             > for #actor_name
         {

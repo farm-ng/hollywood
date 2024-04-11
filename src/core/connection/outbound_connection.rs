@@ -1,10 +1,7 @@
+use crate::core::connection::ConnectionRegister;
+use crate::prelude::*;
+use crate::ConnectionEnum;
 use std::sync::Arc;
-
-use crate::core::outbound::GenericConnection;
-use crate::core::Activate;
-
-use super::ConnectionEnum;
-use super::ConnectionRegister;
 
 /// Connection configuration
 pub struct ConnectionConfig<T> {
@@ -28,7 +25,7 @@ impl<T> Drop for ConnectionConfig<T> {
 }
 
 impl<T> ConnectionConfig<T> {
-    ///
+    /// Create connection configuration
     pub fn new() -> Self {
         let (connection_launch_pad, connection_landing_pad) = tokio::sync::oneshot::channel();
         Self {
@@ -36,6 +33,12 @@ impl<T> ConnectionConfig<T> {
             maybe_register_launch_pad: Some(connection_launch_pad),
             maybe_register_landing_pad: Some(connection_landing_pad),
         }
+    }
+}
+
+impl<T> Default for ConnectionConfig<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -47,6 +50,12 @@ pub struct ActiveConnection<T> {
     pub maybe_register_landing_pad: Option<tokio::sync::oneshot::Receiver<ConnectionRegister<T>>>,
 }
 
+impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> Default for ConnectionEnum<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnum<T> {
     /// new connection
     pub fn new() -> Self {
@@ -54,7 +63,7 @@ impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnum<T> {
     }
 
     /// push connection
-    pub fn push(&mut self, connection: Arc<dyn GenericConnection<T> + Send + Sync>) {
+    pub fn push(&mut self, connection: Arc<dyn IsGenericConnection<T> + Send + Sync>) {
         match self {
             Self::Config(config) => {
                 config.connection_register.push(connection);
@@ -79,7 +88,7 @@ impl<T: Clone + Send + Sync + std::fmt::Debug + 'static> ConnectionEnum<T> {
     }
 }
 
-impl<T> Activate for ConnectionEnum<T> {
+impl<T> HasActivate for ConnectionEnum<T> {
     fn extract(&mut self) -> Self {
         match self {
             Self::Config(config) => Self::Active(ActiveConnection {

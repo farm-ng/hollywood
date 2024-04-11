@@ -1,13 +1,6 @@
+use crate::compute::topology::Topology;
+use crate::prelude::*;
 use std::mem::swap;
-
-use crate::compute::Context;
-use crate::compute::Topology;
-use crate::core::ActorNode;
-use crate::core::InboundMessage;
-use crate::core::InboundMessageNew;
-use crate::core::NullOutbound;
-use crate::core::NullProp;
-use crate::core::NullState;
 
 /// Message to request stop execution of the compute pipeline.
 #[derive(Debug, Clone)]
@@ -22,7 +15,7 @@ impl CancelRequest {
     pub const CANCEL_REQUEST_INBOUND_CHANNEL: &'static str = "CANCEL";
 }
 
-impl InboundMessage for CancelRequest {
+impl IsInboundMessage for CancelRequest {
     type Prop = NullProp;
     type State = NullState;
     type OutboundHub = NullOutbound;
@@ -35,16 +28,16 @@ impl InboundMessage for CancelRequest {
     }
 }
 
-impl InboundMessageNew<()> for CancelRequest {
+impl IsInboundMessageNew<()> for CancelRequest {
     fn new(_inbound_name: String, _: ()) -> Self {
         CancelRequest::Cancel(())
     }
 }
 
 /// Compute pipeline, strictly speaking a DAG (directed acyclic graph) of actors. It is created by
-/// the [Context::configure()] method.
+/// the [Hollywood::configure()] method.
 pub struct Pipeline {
-    actors: Vec<Box<dyn ActorNode + Send>>,
+    actors: Vec<Box<dyn IsActorNode + Send>>,
     topology: Topology,
     /// We have this here to keep receiver alive
     pub cancel_request_sender_template: Option<tokio::sync::mpsc::Sender<CancelRequest>>,
@@ -52,7 +45,7 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub(crate) fn from_context(context: Context) -> Self {
+    pub(crate) fn from_context(context: Hollywood) -> Self {
         let mut active = vec![];
         for actor in context.actors.into_iter() {
             active.push(actor);
@@ -73,7 +66,7 @@ impl Pipeline {
     /// an async function) that resolves to the pipeline itself. The future is completed when all
     /// actors have completed their execution.
     ///
-    /// In particular, [ActorNode::run()] is called for each actor in the pipeline in a dedicated
+    /// In particular, [IsActorNode::run()] is called for each actor in the pipeline in a dedicated
     /// tokio task. Hence, the actors run concurrently.
     ///
     /// TODO:

@@ -1,17 +1,12 @@
-use crate::compute::context::Context;
-use crate::core::actor_builder::ActorBuilder;
-use crate::core::outbound::OutboundHub;
-
-use super::request::NullRequest;
-use super::request::RequestHub;
+use crate::prelude::*;
 
 /// The inbound hub is a collection of inbound channels.
-pub trait InboundHub<Prop, State, OutboundHub, Request: RequestHub<M>, M: InboundMessage>:
+pub trait IsInboundHub<Prop, State, IsOutboundHub, Request: IsRequestHub<M>, M: IsInboundMessage>:
     Send + Sync
 {
     /// Create a new inbound hub for an actor.
     fn from_builder(
-        builder: &mut ActorBuilder<Prop, State, OutboundHub, Request, M>,
+        builder: &mut ActorBuilder<Prop, State, IsOutboundHub, Request, M>,
         actor_name: &str,
     ) -> Self;
 }
@@ -20,11 +15,16 @@ pub trait InboundHub<Prop, State, OutboundHub, Request: RequestHub<M>, M: Inboun
 #[derive(Debug, Clone)]
 pub struct NullInbound {}
 
-impl<Prop, State, OutboundHub, NullMessage: InboundMessage, Request: RequestHub<NullMessage>>
-    InboundHub<Prop, State, OutboundHub, Request, NullMessage> for NullInbound
+impl<
+        Prop,
+        State,
+        IsOutboundHub,
+        NullMessage: IsInboundMessage,
+        Request: IsRequestHub<NullMessage>,
+    > IsInboundHub<Prop, State, IsOutboundHub, Request, NullMessage> for NullInbound
 {
     fn from_builder(
-        _builder: &mut ActorBuilder<Prop, State, OutboundHub, Request, NullMessage>,
+        _builder: &mut ActorBuilder<Prop, State, IsOutboundHub, Request, NullMessage>,
         _actor_name: &str,
     ) -> Self {
         Self {}
@@ -35,7 +35,7 @@ impl<Prop, State, OutboundHub, NullMessage: InboundMessage, Request: RequestHub<
 ///
 /// Inbound channels can be connected to one or more outbound channels of upstream actors.
 #[derive(Debug, Clone)]
-pub struct InboundChannel<T, M: InboundMessage> {
+pub struct InboundChannel<T, M: IsInboundMessage> {
     /// Unique identifier of the inbound channel.
     pub name: String,
     /// Name of the actor that the inbound messages are for.
@@ -44,10 +44,10 @@ pub struct InboundChannel<T, M: InboundMessage> {
     pub(crate) phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Clone + Send + Sync + std::fmt::Debug + 'static, M: InboundMessage> InboundChannel<T, M> {
+impl<T: Clone + Send + Sync + std::fmt::Debug + 'static, M: IsInboundMessage> InboundChannel<T, M> {
     /// Creates a new inbound channel.
     pub fn new(
-        context: &mut Context,
+        context: &mut Hollywood,
         actor_name: &str,
         sender: &tokio::sync::mpsc::Sender<M>,
         name: String,
@@ -63,17 +63,17 @@ impl<T: Clone + Send + Sync + std::fmt::Debug + 'static, M: InboundMessage> Inbo
 }
 
 /// Inbound messages to be received by the actor.
-pub trait InboundMessage: Send + Sync + Clone + 'static {
+pub trait IsInboundMessage: Send + Sync + Clone + 'static {
     /// Prop type of the receiving actor.
     type Prop;
 
     /// State type of the receiving actor.
     type State;
 
-    /// OutboundHub type of the receiving actor, to produce outbound messages downstream.
+    /// IsOutboundHub type of the receiving actor, to produce outbound messages downstream.
     type OutboundHub: Send + Sync + 'static;
 
-    /// RequestHub type of the receiving actor, to send requests upstream.
+    /// IsRequestHub type of the receiving actor, to send requests upstream.
     type RequestHub: Send + Sync + 'static;
 
     /// Name of the inbound channel that this message is for.
@@ -81,7 +81,7 @@ pub trait InboundMessage: Send + Sync + Clone + 'static {
 }
 
 /// Customization point for processing inbound messages.
-pub trait OnMessage: InboundMessage {
+pub trait HasOnMessage: IsInboundMessage {
     /// Process the inbound message - user code with main business logic goes here.
     fn on_message(
         self,
@@ -93,22 +93,22 @@ pub trait OnMessage: InboundMessage {
 }
 
 /// Trait for creating inbound messages of compatible types `T`.
-pub trait InboundMessageNew<T>:
-    std::fmt::Debug + Send + Sync + Clone + 'static + InboundMessage
+pub trait IsInboundMessageNew<T>:
+    std::fmt::Debug + Send + Sync + Clone + 'static + IsInboundMessage
 {
     /// Create a new inbound message from the inbound channel name and the message value of type `T`.
     fn new(inbound_channel: String, value: T) -> Self;
 }
 
 /// Message forwarder.
-pub trait ForwardMessage<Prop, State, OutboundHub, RequestHub, M: InboundMessage> {
-    /// Forward the message to the OnMessage customization point.
+pub trait HasForwardMessage<Prop, State, IsOutboundHub, IsRequestHub, M: IsInboundMessage> {
+    /// Forward the message to the HasOnMessage customization point.
     fn forward_message(
         &self,
         prop: &Prop,
         state: &mut State,
-        outbound: &OutboundHub,
-        request: &RequestHub,
+        outbound: &IsOutboundHub,
+        request: &IsRequestHub,
         msg: M,
     );
 }
@@ -119,8 +119,13 @@ impl<
         State,
         OutboundHub,
         RequestHub,
-        M: OnMessage<Prop = Prop, State = State, OutboundHub = OutboundHub, RequestHub = RequestHub>,
-    > ForwardMessage<Prop, State, OutboundHub, RequestHub, M> for InboundChannel<T, M>
+        M: HasOnMessage<
+            Prop = Prop,
+            State = State,
+            OutboundHub = OutboundHub,
+            RequestHub = RequestHub,
+        >,
+    > HasForwardMessage<Prop, State, OutboundHub, RequestHub, M> for InboundChannel<T, M>
 {
     fn forward_message(
         &self,
@@ -136,25 +141,25 @@ impl<
 
 /// Null message is a marker type for actors with no inbound channels.
 #[derive(Debug)]
-pub enum NullMessage<P: std::marker::Send, S, O: OutboundHub, NullRequest> {
+pub enum NullMessage<P: std::marker::Send, S, O: IsOutboundHub, NullRequest> {
     /// Null message.
     NullMessage(std::marker::PhantomData<(P, S, O, NullRequest)>),
 }
 
-impl<P: std::marker::Send, S, O: OutboundHub> Default for NullMessage<P, S, O, NullRequest> {
+impl<P: std::marker::Send, S, O: IsOutboundHub> Default for NullMessage<P, S, O, NullRequest> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<P: std::marker::Send, S, O: OutboundHub> NullMessage<P, S, O, NullRequest> {
+impl<P: std::marker::Send, S, O: IsOutboundHub> NullMessage<P, S, O, NullRequest> {
     /// Creates a new null message.
     pub fn new() -> Self {
         NullMessage::NullMessage(std::marker::PhantomData {})
     }
 }
 
-impl<P: std::marker::Send, S, O: OutboundHub> Clone for NullMessage<P, S, O, NullRequest> {
+impl<P: std::marker::Send, S, O: IsOutboundHub> Clone for NullMessage<P, S, O, NullRequest> {
     fn clone(&self) -> Self {
         Self::new()
     }
@@ -163,8 +168,8 @@ impl<P: std::marker::Send, S, O: OutboundHub> Clone for NullMessage<P, S, O, Nul
 impl<
         P: std::marker::Send + std::marker::Sync + 'static,
         S: std::marker::Send + std::marker::Sync + 'static,
-        O: OutboundHub,
-    > InboundMessage for NullMessage<P, S, O, NullRequest>
+        O: IsOutboundHub,
+    > IsInboundMessage for NullMessage<P, S, O, NullRequest>
 {
     type Prop = P;
     type State = S;
@@ -179,8 +184,8 @@ impl<
 impl<
         P: std::marker::Send + std::marker::Sync + 'static,
         S: std::marker::Send + std::marker::Sync + 'static,
-        O: OutboundHub,
-    > OnMessage for NullMessage<P, S, O, NullRequest>
+        O: IsOutboundHub,
+    > HasOnMessage for NullMessage<P, S, O, NullRequest>
 {
     fn on_message(
         self,

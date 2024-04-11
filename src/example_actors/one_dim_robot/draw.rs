@@ -1,18 +1,13 @@
 use crate::actors::zip::Tuple3;
-use crate::core::request::NullRequest;
-use crate::core::InboundMessageNew;
-use crate::core::NullOutbound;
-use crate::core::OnMessage;
-use crate::core::*;
 use crate::example_actors::one_dim_robot::NamedFilterState;
 use crate::example_actors::one_dim_robot::Robot;
 use crate::example_actors::one_dim_robot::Stamped;
-use crate::macros::*;
+use crate::prelude::*;
 use drawille::Canvas;
 
 /// Inbound channels for the draw actor
 #[derive(Clone, Debug)]
-#[actor_inputs(DrawInbound, {NullProp, DrawState, NullOutbound,NullRequest})]
+#[actor_inputs(DrawInbound, {NullProp, DrawState, NullOutbound, NullRequest})]
 pub enum DrawInboundMessage {
     /// Tuple of true pos, true range and filter state
     Zipped(Tuple3<u64, Stamped<Robot>, Stamped<f64>, NamedFilterState>),
@@ -22,7 +17,7 @@ pub enum DrawInboundMessage {
 #[actor(DrawInboundMessage)]
 pub type DrawActor = Actor<NullProp, DrawInbound, DrawState, NullOutbound, NullRequest>;
 
-impl OnMessage for DrawInboundMessage {
+impl HasOnMessage for DrawInboundMessage {
     /// Forward the message to the correct handler method of [DrawState].
     fn on_message(
         self,
@@ -39,7 +34,7 @@ impl OnMessage for DrawInboundMessage {
     }
 }
 
-impl InboundMessageNew<Tuple3<u64, Stamped<Robot>, Stamped<f64>, NamedFilterState>>
+impl IsInboundMessageNew<Tuple3<u64, Stamped<Robot>, Stamped<f64>, NamedFilterState>>
     for DrawInboundMessage
 {
     fn new(

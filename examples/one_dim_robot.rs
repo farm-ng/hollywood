@@ -4,9 +4,6 @@ use hollywood::actors::zip::ZipPair;
 use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
 use hollywood::actors::Zip3;
-use hollywood::compute::Context;
-use hollywood::core::*;
-
 use hollywood::example_actors::one_dim_robot::draw::DrawState;
 use hollywood::example_actors::one_dim_robot::filter::FilterState;
 use hollywood::example_actors::one_dim_robot::DrawActor;
@@ -16,9 +13,10 @@ use hollywood::example_actors::one_dim_robot::Robot;
 use hollywood::example_actors::one_dim_robot::Sim;
 use hollywood::example_actors::one_dim_robot::SimState;
 use hollywood::example_actors::one_dim_robot::Stamped;
+use hollywood::prelude::*;
 
 async fn run_robot_example() {
-    let pipeline = Context::configure(&mut |context| {
+    let pipeline = Hollywood::configure(&mut |context| {
         let mut timer = Periodic::new_with_period(context, 0.1);
         let mut sim = Sim::from_prop_and_state(
             context,

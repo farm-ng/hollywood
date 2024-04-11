@@ -1,27 +1,22 @@
+use crate::core::connection::RequestConnectionEnum;
+use crate::core::connection::RequestConnectionRegister;
+use crate::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
-
 use tokio::sync::mpsc::error::SendError;
-
-use crate::core::Activate;
-use crate::core::InboundMessage;
-use crate::core::InboundMessageNew;
-
-use super::RequestConnectionEnum;
-use super::RequestConnectionRegister;
 
 pub(crate) trait GenericRequestConnection<T>: Send + Sync {
     fn send_impl(&self, msg: T);
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RequestConnection<T, M: InboundMessage> {
+pub(crate) struct RequestConnection<T, M: IsInboundMessage> {
     pub(crate) sender: tokio::sync::mpsc::Sender<M>,
     pub(crate) inbound_channel: String,
     pub(crate) phantom: PhantomData<T>,
 }
 
-impl<T: Send + Sync, M: InboundMessageNew<T>> GenericRequestConnection<T>
+impl<T: Send + Sync, M: IsInboundMessageNew<T>> GenericRequestConnection<T>
     for RequestConnection<T, M>
 {
     fn send_impl(&self, msg: T) {
@@ -107,7 +102,7 @@ impl<T: Send + Sync + std::fmt::Debug + 'static> RequestConnectionEnum<T> {
     }
 }
 
-impl<T> Activate for RequestConnectionEnum<T> {
+impl<T> HasActivate for RequestConnectionEnum<T> {
     fn extract(&mut self) -> Self {
         match self {
             Self::Config(config) => Self::Active(ActiveRequestConnection {

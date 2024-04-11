@@ -1,12 +1,10 @@
+use crate::core::connection::outbound_connection::ActiveConnection;
+use crate::core::connection::outbound_connection::ConnectionConfig;
+use crate::core::connection::request_connection::ActiveRequestConnection;
+use crate::core::connection::request_connection::GenericRequestConnection;
+use crate::core::connection::request_connection::RequestConnectionConfig;
+use crate::prelude::*;
 use std::sync::Arc;
-
-use self::outbound_connection::ActiveConnection;
-use self::outbound_connection::ConnectionConfig;
-use self::request_connection::ActiveRequestConnection;
-use self::request_connection::GenericRequestConnection;
-use self::request_connection::RequestConnectionConfig;
-
-use super::outbound::GenericConnection;
 
 /// Infrastructure to connect an outbound channel of one actor to an inbound channel of another actor.
 ///
@@ -18,7 +16,7 @@ pub mod outbound_connection;
 /// Note that the implementation is a bit over-engineered and can likely be simplified.
 pub mod request_connection;
 
-type ConnectionRegister<T> = Vec<Arc<dyn GenericConnection<T> + Send + Sync>>;
+type ConnectionRegister<T> = Vec<Arc<dyn IsGenericConnection<T> + Send + Sync>>;
 
 /// Connection
 pub enum ConnectionEnum<T> {

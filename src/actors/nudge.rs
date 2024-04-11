@@ -1,23 +1,9 @@
-use std::fmt::Debug;
-
-use async_trait::async_trait;
-use hollywood_macros::actor_outputs;
-
-use crate::compute::context::Context;
-use crate::core::connection::ConnectionEnum;
-use crate::core::NullState;
-
-use crate::core::actor::ActorNode;
-use crate::core::actor::FromPropState;
-use crate::core::actor::GenericActor;
-use crate::core::inbound::ForwardMessage;
-use crate::core::inbound::NullInbound;
-use crate::core::inbound::NullMessage;
-use crate::core::outbound::Activate;
-use crate::core::outbound::OutboundChannel;
-use crate::core::outbound::OutboundHub;
-use crate::core::request::NullRequest;
 use crate::core::runner::Runner;
+use crate::prelude::*;
+use crate::ConnectionEnum;
+use crate::GenericActor;
+use async_trait::async_trait;
+use std::fmt::Debug;
 
 /// Prop for the nudge actor.
 #[derive(Clone, Debug, Default)]
@@ -40,13 +26,13 @@ pub type Nudge<Item> = GenericActor<
 
 impl<Item: Default + Sync + Send + Debug + 'static + Clone> Nudge<Item> {
     /// Create a new nudge actor
-    pub fn new(context: &mut Context, item: Item) -> Nudge<Item> {
+    pub fn new(context: &mut Hollywood, item: Item) -> Nudge<Item> {
         Nudge::from_prop_and_state(context, NudgeProp::<Item> { item }, NullState::default())
     }
 }
 
 impl<Item: Default + Sync + Send + Clone + Debug + 'static>
-    FromPropState<
+    HasFromPropState<
         NudgeProp<Item>,
         NullInbound,
         NullState,
@@ -92,7 +78,7 @@ impl<Item: Default + Sync + Send + Clone + Debug + 'static>
         _forward: std::collections::HashMap<
             String,
             Box<
-                dyn ForwardMessage<
+                dyn HasForwardMessage<
                         NudgeProp<Item>,
                         NullState,
                         NudgeOutbound<Item>,
@@ -104,7 +90,7 @@ impl<Item: Default + Sync + Send + Clone + Debug + 'static>
         >,
         outbound: NudgeOutbound<Item>,
         _request: NullRequest,
-    ) -> Box<dyn ActorNode + Send + Sync> {
+    ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(NudgeActor::<Item> {
             name: name.clone(),
             prop,
@@ -125,7 +111,7 @@ pub struct NudgeActor<Item: Clone + 'static + Default + Clone + Send + Sync + st
 }
 
 #[async_trait]
-impl<Item: 'static + Default + Clone + Send + Sync + std::fmt::Debug> ActorNode
+impl<Item: 'static + Default + Clone + Send + Sync + std::fmt::Debug> IsActorNode
     for NudgeActor<Item>
 {
     fn name(&self) -> &String {

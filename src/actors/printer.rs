@@ -1,20 +1,6 @@
+use crate::prelude::*;
 use std::fmt::Debug;
 use std::fmt::Display;
-
-use hollywood_macros::actor_inputs;
-
-use crate::core::request::NullRequest;
-use crate::core::Actor;
-use crate::core::ActorBuilder;
-use crate::core::DefaultRunner;
-use crate::core::FromPropState;
-use crate::core::InboundChannel;
-use crate::core::InboundHub;
-use crate::core::InboundMessage;
-use crate::core::InboundMessageNew;
-use crate::core::NullOutbound;
-use crate::core::NullState;
-use crate::core::OnMessage;
 
 /// Configuration properties for the printer actor.
 #[derive(Clone, Debug)]
@@ -39,7 +25,7 @@ pub enum PrinterInboundMessage<T: Default + Debug + Display + Clone + Sync + Sen
     Printable(T),
 }
 
-impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> OnMessage
+impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> HasOnMessage
     for PrinterInboundMessage<T>
 {
     fn on_message(
@@ -57,7 +43,7 @@ impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> OnMessage
     }
 }
 
-impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> InboundMessageNew<T>
+impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> IsInboundMessageNew<T>
     for PrinterInboundMessage<T>
 {
     fn new(_inbound_name: String, msg: T) -> Self {
@@ -69,7 +55,7 @@ impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> InboundMessag
 pub type Printer<T> = Actor<PrinterProp, PrinterInbound<T>, NullState, NullOutbound, NullRequest>;
 
 impl<T: Clone + Sync + Default + Send + 'static + Debug + Display>
-    FromPropState<
+    HasFromPropState<
         PrinterProp,
         PrinterInbound<T>,
         NullState,

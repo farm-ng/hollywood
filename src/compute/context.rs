@@ -1,32 +1,28 @@
+use crate::compute::topology::Topology;
+use crate::core::outbound::OutboundConnection;
+use crate::prelude::*;
+use crate::CancelRequest;
+use crate::Pipeline;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::compute::CancelRequest;
-use crate::compute::Pipeline;
-use crate::compute::Topology;
-use crate::core::ActorNode;
-use crate::core::InboundChannel;
-use crate::core::InboundMessage;
-use crate::core::OutboundChannel;
-use crate::core::OutboundConnection;
-
 /// The context of the compute graph which is used to configure the network topology.
 ///
-/// It is an opaque type created by the Context::configure() method.
-pub struct Context {
-    pub(crate) actors: Vec<Box<dyn ActorNode + Send>>,
+/// It is an opaque type created by the Hollywood::configure() method.
+pub struct Hollywood {
+    pub(crate) actors: Vec<Box<dyn IsActorNode + Send>>,
     pub(crate) topology: Topology,
     pub(crate) cancel_request_sender_template: tokio::sync::mpsc::Sender<CancelRequest>,
     pub(crate) cancel_request_receiver: tokio::sync::mpsc::Receiver<CancelRequest>,
 }
 
-impl Context {
+impl Hollywood {
     /// Create a new context.
     ///
     /// This is the main entry point to configure the compute graph. The network topology is defined
     /// by the user within the callback function.
-    pub fn configure(callback: &mut dyn FnMut(&mut Context)) -> Pipeline {
-        let mut context = Context::new();
+    pub fn configure(callback: &mut dyn FnMut(&mut Hollywood)) -> Pipeline {
+        let mut context = Hollywood::new();
         callback(&mut context);
         Pipeline::from_context(context)
     }
@@ -89,7 +85,7 @@ impl Context {
     pub(crate) fn connect_impl<
         T0: Clone + std::fmt::Debug + Sync + Send + 'static,
         T1: Clone + std::fmt::Debug + Sync + Send + 'static,
-        M: InboundMessage,
+        M: IsInboundMessage,
     >(
         &mut self,
         outbound: &mut OutboundChannel<T0>,

@@ -22,22 +22,22 @@
 //!
 //! The library is organized in the following modules:
 //!
-//! - The [core] module contains the core structs and traits of the library. [Actor](core::Actor)
-//!   is a generic struct that represents an actor. [InboundHub](core::InboundHub) is the trait
+//! - The [core] module contains the core structs and traits of the library. [Actor]
+//!   is a generic struct that represents an actor. [IsInboundHub] is the trait
 //!   which represents the collection of inbound channels of an actor. Similarly,
-//!   [OutboundHub](core::OutboundHub) is the trait which represents the collection of outbound
+//!   [IsOutboundHub] is the trait which represents the collection of outbound
 //!   channels of an actor.
 //!
-//!   Most importantly, [OnMessage](core::OnMessage) is the main entry point for user code and sets
-//!   the behavior of a user-defines actor. [OnMessage::on_message()](core::OnMessage::on_message())
+//!   Most importantly, [HasOnMessage] is the main entry point for user code and sets
+//!   the behavior of a user-defines actor. [HasOnMessage::on_message()]
 //!   processes incoming messages, updates the actor's state and sends messages to downstream actors
 //!   in the pipeline.
 //!
 //! - The [macros] module contains the three macros that are used to define an actors with
 //!   minimal boilerplate.
 //!
-//! - The [compute] module contains the [Context](compute::Context) and
-//!   [Pipeline](compute::Pipeline) which are used to configure a set of actors, connect
+//! - The [compute] module contains the [Hollywood] context and
+//!   [Pipeline] which are used to configure a set of actors, connect
 //!   them into a graph and to execute flow.
 //!
 //! - The [actors] module contains a set of predefined actors that can be used as part of a compute
@@ -121,7 +121,7 @@
 //!     Value(f64),
 //! }
 //!
-//! impl OnMessage for MovingAverageMessage {
+//! impl HasOnMessage for MovingAverageMessage {
 //!     /// Process the inbound time-stamp message.
 //!     fn on_message(
 //!         &self,
@@ -143,7 +143,7 @@
 //!     }
 //! }
 //!
-//! impl InboundMessageNew<f64> for MovingAverageMessage {
+//! impl IsInboundMessageNew<f64> for MovingAverageMessage {
 //!     fn new(_inbound_name: String, msg: f64) -> Self {
 //!         MovingAverageMessage::Value(msg)
 //!     }
@@ -151,7 +151,7 @@
 //! ```
 //!
 //! The moving average is calculated from the stream of values received on this channel.
-//! OnMessage trait implementation the actual business logic of the actor is implemented.
+//! HasOnMessage trait implementation the actual business logic of the actor is implemented.
 //!
 //! ### The actor
 //!
@@ -185,11 +185,9 @@
 //!
 //! ```rust
 //! # use hollywood::actors::{Periodic, Printer, PrinterProp};
-//! # use hollywood::core::FromPropState;
-//! # use hollywood::core::value::NullState;
-//! # use hollywood::compute::Context;
+//! # use hollywood::prelude::*;
 //! # use hollywood::example_actors::moving_average::{MovingAverage, MovingAverageProp, MovingAverageState};
-//! let pipeline = Context::configure(&mut |context| {
+//! let pipeline = Hollywood::configure(&mut |context| {
 //!     let mut timer = Periodic::new_with_period(context, 1.0);
 //!     let mut moving_average = MovingAverage::from_prop_and_state(
 //!         context,
@@ -230,8 +228,8 @@
 //! pipeline.run();
 //! ```
 //!
-//! The [Pipeline::print_flow_graph()](compute::Pipeline::print_flow_graph()) method prints the
-//! topology of the compute pipeline to the console.
+//! The [Pipeline::print_flow_graph()]method prints the topology of the compute pipeline to the
+//! console.
 //!
 //! ``` text
 //! *   Periodic_0   *                                     
@@ -267,7 +265,7 @@
 //! of one actor to a compatible inbound channel of another actor downstream.
 //!
 //! These channel connections are configured at runtime using
-//! [OutboundChannel::connect()](core::OutboundChannel::connect) during the pipeline configuration
+//! [OutboundChannel::connect()] during the pipeline configuration
 //! step. In the simple example above, we had a 1:2 and a 1:1 connection: The process_time_stamp
 //! outbound channel of the Periodic actor was connected to two inbound channels. The average
 //! outbound channel of the MovingAverage actor was connected to one inbound channel. In general,
@@ -275,21 +273,53 @@
 //! channels. Similarly, each inbound channel can be connected to zero, one or more outbound
 //! channels. If an outbound channel is connected to multiple inbound channels, the messages are
 //! broadcasted to all connected inbound channels. This is the main reason why
-//! [InboundMessage](core::InboundMessage) must be [Clone].
+//! [IsInboundMessage] must be [Clone].
 //!
 //! The types of connected outbound channels must match the type of the connected inbound channel.
 //! An inbound channel is uniquely identified by a **variant** of the
-//! [InboundMessage](core::InboundMessage) enum. Messages received from connected outbound channels
+//! [IsInboundMessage] enum. Messages received from connected outbound channels
 //! are merged into a single stream and processed in the corresponding match arm (for that
-//! **variant**) within the [OnMessage::on_message()](core::OnMessage::on_message()) method in a
+//! **variant**) within the [HasOnMessage::on_message()] method in a
 //! uniform manner, regardless of the outbound channel (and actor) the message originated
 //! from.
 //!
 /// The core framework concepts such as actors, state, inbound, outbound and runners.
 pub mod core;
+pub use crate::core::actor::Actor;
+pub use crate::core::actor::ForwardTable;
+pub use crate::core::actor::GenericActor;
+pub use crate::core::actor::HasFromPropState;
+pub use crate::core::actor::IsActorNode;
+pub use crate::core::connection::ConnectionEnum;
+pub use crate::core::inbound::HasForwardMessage;
+pub use crate::core::outbound::IsGenericConnection;
+pub use crate::core::outbound::IsOutboundHub;
+pub use crate::core::request::IsRequestHub;
+pub use crate::core::request::ReplyMessage;
+pub use crate::core::request::RequestChannel;
+pub use crate::core::request::RequestMessage;
+pub use crate::core::runner::Runner;
+pub use core::actor_builder::ActorBuilder;
+pub use core::inbound::HasOnMessage;
+pub use core::inbound::InboundChannel;
+pub use core::inbound::IsInboundHub;
+pub use core::inbound::IsInboundMessage;
+pub use core::inbound::IsInboundMessageNew;
+pub use core::inbound::NullInbound;
+pub use core::inbound::NullMessage;
+pub use core::outbound::HasActivate;
+pub use core::outbound::NullOutbound;
+pub use core::outbound::OutboundChannel;
+pub use core::request::NullRequest;
+pub use core::runner::DefaultRunner;
+pub use core::value::NullProp;
+pub use core::value::NullState;
 
 /// The compute context and compute graph.
 pub mod compute;
+pub use crate::compute::context::Hollywood;
+pub use crate::compute::pipeline::CancelRequest;
+pub use compute::pipeline::Pipeline;
 
 /// Introspection
 pub mod introspect;
@@ -333,8 +363,8 @@ pub mod macros {
     /// struct consists of a zero, one or more outbound channels. Each outbound channel has a
     /// user-specified name CHANNEL* and a user specified type TYPE*.
     ///
-    /// Effect: The macro generates the [OutboundHub](crate::core::OutboundHub) and
-    /// [Activate](crate::core::Activate) implementations for the provided struct OUTBOUND.
+    /// Effect: The macro generates the [IsOutboundHub](crate::IsOutboundHub) and
+    /// [HasActivate](crate::HasActivate) implementations for the provided struct OUTBOUND.
     ///
     /// This is the first of three macros to define an actor. The other two are [macro@actor_inputs]
     /// and [macro@actor].
@@ -359,8 +389,8 @@ pub mod macros {
     /// Each request channel has name CHANNEL*, a request type REQ_TYPE*, a reply type REPL_TYPE*,
     /// and a message type M*.
     ///
-    /// Effect: The macro generates the [RequestHub](crate::core::RequestHub) and
-    /// [Activate](crate::core::Activate) implementations for the provided struct REQUEST.
+    /// Effect: The macro generates the [IsRequestHub](crate::IsRequestHub) and
+    /// [HasActivate](crate::HasActivate) implementations for the provided struct REQUEST.
     ///
     pub use hollywood_macros::actor_requests;
 
@@ -383,17 +413,17 @@ pub mod macros {
     /// variant has a user-specified name VARIENT* and type TYPE*.
     ///
     /// Prerequisite:
-    ///   - The OUTBOUND struct is defined and implements [OutboundHub](crate::core::OutboundHub)
-    ///     and [Activate](crate::core::Activate), typically using the [macro@actor_outputs] macro.
-    ///  - The REQUEST struct is defined and implements [RequestHub](crate::core::RequestHub) and
-    ///     [Activate](crate::core::Activate), e.g. using the [actor_requests] macro.
+    ///   - The OUTBOUND struct is defined and implements [IsOutboundHub](crate::IsOutboundHub)
+    ///     and [HasActivate](crate::HasActivate), typically using the [macro@actor_outputs] macro.
+    ///  - The REQUEST struct is defined and implements [IsRequestHub](crate::IsRequestHub) and
+    ///     [HasActivate](crate::HasActivate), e.g. using the [actor_requests] macro.
     ///   - The PROP and STATE structs are defined.
     ///
     /// Effects:
     ///   - The macro defines the struct INBOUND that contains an inbound channel field for each
     ///     variant of the INBOUND_MESSAGE enum, and implements the
-    ///     [InboundHub](crate::core::InboundHub) trait for it.
-    ///   - Implements the [InboundMessage](crate::core::InboundMessage) trait for INBOUND_MESSAGE.
+    ///     [IsInboundHub](crate::IsInboundHub) trait for it.
+    ///   - Implements the [IsInboundMessage](crate::IsInboundMessage) trait for INBOUND_MESSAGE.
     ///
     pub use hollywood_macros::actor_inputs;
 
@@ -407,22 +437,52 @@ pub mod macros {
     /// ```
     ///
     /// Here, ACTOR is the user-specified name of the actor type. The actor type shall be defined
-    /// right after the macro invocation as an alias of [Actor](crate::core::Actor).
+    /// right after the macro invocation as an alias of [Actor](crate::Actor).
     ///
     /// Prerequisites:
-    ///   - The OUTBOUND struct is defined and implements (OutboundHub)[crate::core::OutboundHub]
-    ///     and [Activate](crate::core::Activate), e.g. using the [actor_outputs] macro.
-    ///   - The REQUEST struct is defined and implements [RequestHub](crate::core::RequestHub) and
-    ///     [Activate](crate::core::Activate), e.g. using the [actor_requests] macro.
+    ///   - The OUTBOUND struct is defined and implements [IsOutboundHub](crate::IsOutboundHub) and
+    ///     [HasActivate](crate::HasActivate), e.g. using the [actor_outputs] macro.
+    ///   - The REQUEST struct is defined and implements [IsRequestHub](crate::IsRequestHub) and
+    ///     [HasActivate](crate::HasActivate), e.g. using the [actor_requests] macro.
     ///   - The INBOUND_MESSAGE enum is defined and implements
-    ///     [InboundMessage](crate::core::InboundMessage), as well as the INBOUND
-    ///     struct is defined and implements the [InboundHub](crate::core::InboundHub) trait, e.g.
-    ///     through the [macro@actor_inputs] macro.
+    ///     [IsInboundMessage](crate::IsInboundMessage), as well as the INBOUND struct is defined
+    ///     and implements the [IsInboundHub](crate::IsInboundHub) trait, e.g through the
+    ///     [actor_inputs] macro.
     ///   - The PROP and STATE structs are defined.
     ///
     /// Effect:
-    ///   - This macro implements the [FromPropState](crate::core::FromPropState) trait for the ACTOR
+    ///   - This macro implements the [HasFromPropState](crate::HasFromPropState) trait for the ACTOR
     ///     type.
     ///
     pub use hollywood_macros::actor;
+
+    pub use hollywood_macros::zip_n;
+}
+
+/// The prelude module contains the most important traits and structs of the library.
+pub mod prelude {
+    pub use crate::macros::*;
+    pub use crate::Actor;
+    pub use crate::ActorBuilder;
+    pub use crate::DefaultRunner;
+    pub use crate::HasActivate;
+    pub use crate::HasForwardMessage;
+    pub use crate::HasFromPropState;
+    pub use crate::HasOnMessage;
+    pub use crate::Hollywood;
+    pub use crate::InboundChannel;
+    pub use crate::IsActorNode;
+    pub use crate::IsGenericConnection;
+    pub use crate::IsInboundHub;
+    pub use crate::IsInboundMessage;
+    pub use crate::IsInboundMessageNew;
+    pub use crate::IsOutboundHub;
+    pub use crate::IsRequestHub;
+    pub use crate::NullInbound;
+    pub use crate::NullMessage;
+    pub use crate::NullOutbound;
+    pub use crate::NullProp;
+    pub use crate::NullRequest;
+    pub use crate::NullState;
+    pub use crate::OutboundChannel;
 }

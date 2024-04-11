@@ -1,24 +1,4 @@
-use crate::macros::*;
-
-// needed for actor_outputs macro
-pub use crate::compute::Context;
-use crate::core::request::NullRequest;
-pub use crate::core::Activate;
-pub use crate::core::OutboundChannel;
-pub use crate::core::OutboundHub;
-
-// needed for actor_inputs macro
-pub use crate::core::ActorBuilder;
-pub use crate::core::InboundChannel;
-pub use crate::core::InboundHub;
-pub use crate::core::InboundMessage;
-pub use crate::core::InboundMessageNew;
-pub use crate::core::OnMessage;
-
-// needed for actor macro
-pub use crate::core::Actor;
-pub use crate::core::DefaultRunner;
-pub use crate::core::FromPropState;
+use crate::prelude::*;
 
 /// Outbound hub for the MovingAverage.
 #[actor_outputs]
@@ -64,7 +44,7 @@ pub enum MovingAverageMessage {
     Value(f64),
 }
 
-impl OnMessage for MovingAverageMessage {
+impl HasOnMessage for MovingAverageMessage {
     /// Process the inbound time_stamp message.
     fn on_message(
         self,
@@ -86,7 +66,7 @@ impl OnMessage for MovingAverageMessage {
     }
 }
 
-impl InboundMessageNew<f64> for MovingAverageMessage {
+impl IsInboundMessageNew<f64> for MovingAverageMessage {
     fn new(_inbound_name: String, msg: f64) -> Self {
         MovingAverageMessage::Value(msg)
     }
