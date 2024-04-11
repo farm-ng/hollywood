@@ -1,29 +1,12 @@
-use std::fmt::Debug;
-
-use rand_distr::Distribution;
-use rand_distr::Normal;
-
-use crate::compute::Context;
-use crate::core::request::ReplyMessage;
-use crate::core::request::RequestChannel;
-use crate::core::request::RequestHub;
-use crate::core::Activate;
-use crate::core::Actor;
-use crate::core::ActorBuilder;
-use crate::core::DefaultRunner;
-use crate::core::FromPropState;
-use crate::core::InboundChannel;
-use crate::core::InboundHub;
-use crate::core::InboundMessage;
-use crate::core::InboundMessageNew;
-use crate::core::NullProp;
-use crate::core::OnMessage;
-use crate::core::OutboundChannel;
-use crate::core::OutboundHub;
 use crate::example_actors::one_dim_robot::RangeMeasurementModel;
 use crate::example_actors::one_dim_robot::Robot;
 use crate::example_actors::one_dim_robot::Stamped;
-use crate::macros::*;
+use crate::prelude::*;
+use crate::ReplyMessage;
+use crate::RequestChannel;
+use rand_distr::Distribution;
+use rand_distr::Normal;
+use std::fmt::Debug;
 
 /// Ping-pong request message.
 #[derive(Clone, Debug, Default)]
@@ -48,7 +31,7 @@ pub enum SimInboundMessage {
 #[actor(SimInboundMessage)]
 pub type Sim = Actor<NullProp, SimInbound, SimState, SimOutbound, SimRequest>;
 
-impl OnMessage for SimInboundMessage {
+impl HasOnMessage for SimInboundMessage {
     /// Invokes [SimState::process_time_stamp()] on TimeStamp.
     fn on_message(
         self,
@@ -71,13 +54,13 @@ impl OnMessage for SimInboundMessage {
     }
 }
 
-impl InboundMessageNew<f64> for SimInboundMessage {
+impl IsInboundMessageNew<f64> for SimInboundMessage {
     fn new(_inbound_name: String, msg: f64) -> Self {
         SimInboundMessage::TimeStamp(msg)
     }
 }
 
-impl InboundMessageNew<ReplyMessage<PingPong>> for SimInboundMessage {
+impl IsInboundMessageNew<ReplyMessage<PingPong>> for SimInboundMessage {
     fn new(_inbound_name: String, msg: ReplyMessage<PingPong>) -> Self {
         SimInboundMessage::PingPongReply(msg)
     }

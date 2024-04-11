@@ -1,10 +1,8 @@
-use crate::compute::CancelRequest;
-use crate::compute::Context;
-use crate::core::*;
+use crate::core::request::IsRequestMessage;
+use crate::prelude::*;
+use crate::CancelRequest;
+use crate::RequestMessage;
 use std::fmt::Debug;
-
-use self::request::IsRequestMessage;
-use self::request::RequestMessage;
 
 /// The inbound message for the egui actor.
 #[derive(Clone, Debug, Default)]
@@ -40,7 +38,7 @@ impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
         Request: Default + Debug + Clone + Send + Sync + 'static,
         Reply: Default + Debug + Clone + Send + Sync + 'static,
-    > InboundMessageNew<Stream<T>> for EguiInboundMessage<T, Request, Reply>
+    > IsInboundMessageNew<Stream<T>> for EguiInboundMessage<T, Request, Reply>
 {
     fn new(_inbound_name: String, p: Stream<T>) -> Self {
         EguiInboundMessage::<T, Request, Reply>::Stream(p)
@@ -51,7 +49,8 @@ impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
         Request: Default + Debug + Clone + Send + Sync + 'static,
         Reply: Default + Debug + Clone + Send + Sync + 'static,
-    > InboundMessageNew<RequestMessage<Request, Reply>> for EguiInboundMessage<T, Request, Reply>
+    > IsInboundMessageNew<RequestMessage<Request, Reply>>
+    for EguiInboundMessage<T, Request, Reply>
 {
     fn new(_inbound_name: String, p: RequestMessage<Request, Reply>) -> Self {
         EguiInboundMessage::<T, Request, Reply>::Request(p)
@@ -62,7 +61,7 @@ impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
         Request: Default + Debug + Clone + Send + Sync + 'static,
         Reply: Default + Debug + Clone + Send + Sync + 'static,
-    > InboundMessage for EguiInboundMessage<T, Request, Reply>
+    > IsInboundMessage for EguiInboundMessage<T, Request, Reply>
 {
     type Prop = NullProp;
 
@@ -95,7 +94,7 @@ impl<
         Request: Default + Debug + Clone + Send + Sync + 'static,
         Reply: Default + Debug + Clone + Send + Sync + 'static,
     >
-    InboundHub<
+    IsInboundHub<
         NullProp,
         EguiState<T, RequestMessage<Request, Reply>>,
         NullOutbound,
@@ -141,7 +140,7 @@ impl<
         T: Default + Debug + Clone + Send + Sync + 'static,
         Request: Default + Debug + Clone + Send + Sync + 'static,
         Reply: Default + Debug + Clone + Send + Sync + 'static,
-    > OnMessage for EguiInboundMessage<T, Request, Reply>
+    > HasOnMessage for EguiInboundMessage<T, Request, Reply>
 {
     /// Forward the message to the egui app.
     fn on_message(
@@ -182,7 +181,7 @@ impl<
         Request: Default + Debug + Clone + Send + Sync + 'static,
         Reply: Default + Debug + Clone + Send + Sync + 'static,
     >
-    FromPropState<
+    HasFromPropState<
         NullProp,
         ViewerInbound<T, Request, Reply>,
         EguiState<T, RequestMessage<Request, Reply>>,
@@ -211,7 +210,7 @@ impl<
 {
     /// Create a new egui actor from the builder.
     pub fn from_builder<Builder: EguiActorBuilder<T, RequestMessage<Request, Reply>>>(
-        context: &mut Context,
+        context: &mut Hollywood,
         builder: &Builder,
     ) -> Self {
         Self::from_prop_and_state(

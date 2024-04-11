@@ -1,17 +1,8 @@
+use crate::core::runner::Runner;
+use crate::prelude::*;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tokio::select;
-
-use crate::compute::context::Context;
-use crate::core::actor_builder::ActorBuilder;
-use crate::core::inbound::ForwardMessage;
-use crate::core::inbound::InboundHub;
-use crate::core::inbound::InboundMessage;
-use crate::core::outbound::OutboundHub;
-use crate::core::runner::DefaultRunner;
-use crate::core::runner::Runner;
-
-use super::request::RequestHub;
 
 /// A generic actor in the hollywood compute graph framework.
 ///
@@ -19,8 +10,8 @@ use super::request::RequestHub;
 /// outbound channels as well as its properties, state and runner types.
 ///
 /// The generic actor struct is merely a user-facing facade to configure network connections. Actual
-/// properties, state and inbound routing is stored in the [ActorNode] structs.
-pub struct GenericActor<Prop, Inbound, State, Outbound: OutboundHub, Request, Run> {
+/// properties, state and inbound routing is stored in the [IsActorNode] structs.
+pub struct GenericActor<Prop, Inbound, State, Outbound: IsOutboundHub, Request, Run> {
     /// unique identifier of the actor
     pub actor_name: String,
     /// a collection of inbound channels
@@ -34,23 +25,23 @@ pub struct GenericActor<Prop, Inbound, State, Outbound: OutboundHub, Request, Ru
 
 /// An actor of the default runner type, but otherwise generic over its, prop, state, inbound
 /// and outbound channel types.
-pub type Actor<Prop, Inbound, State, OutboundHub, Request> = GenericActor<
+pub type Actor<Prop, Inbound, State, IsOutboundHub, Request> = GenericActor<
     Prop,
     Inbound,
     State,
-    OutboundHub,
+    IsOutboundHub,
     Request,
-    DefaultRunner<Prop, Inbound, State, OutboundHub, Request>,
+    DefaultRunner<Prop, Inbound, State, IsOutboundHub, Request>,
 >;
 
 /// New actor from properties and state.
-pub trait FromPropState<
+pub trait HasFromPropState<
     Prop,
-    Inbound: InboundHub<Prop, State, Outbound, Request, M>,
+    Inbound: IsInboundHub<Prop, State, Outbound, Request, M>,
     State,
-    Outbound: OutboundHub,
-    M: InboundMessage,
-    Request: RequestHub<M>,
+    Outbound: IsOutboundHub,
+    M: IsInboundMessage,
+    Request: IsRequestHub<M>,
     Run: Runner<Prop, Inbound, State, Outbound, Request, M>,
 >
 {
@@ -62,7 +53,7 @@ pub trait FromPropState<
     ///
     /// Also, a dormant actor node is created added to the context.
     fn from_prop_and_state(
-        context: &mut Context,
+        context: &mut Hollywood,
         prop: Prop,
         initial_state: State,
     ) -> GenericActor<Prop, Inbound, State, Outbound, Request, Run> {
@@ -80,7 +71,7 @@ pub trait FromPropState<
 
 /// Actor node of the pipeline. It is created by the [Runner::new_actor_node()] method.
 #[async_trait]
-pub trait ActorNode {
+pub trait IsActorNode {
     /// Return the actor's name.
     fn name(&self) -> &String;
 
@@ -89,12 +80,10 @@ pub trait ActorNode {
     ///   * For each inbound channel there are zero, one or more incoming connections. Messages on
     ///     these incoming streams are merged into a single stream.
     ///   * Messages for all inbound channels are processed sequentially using the
-    ///     [OnMessage::on_message()](crate::core::OnMessage::on_message()) method. Sequential
-    ///     processing is crucial to ensure that the actor's state is updated in a consistent
-    ///     manner. Sequential mutable access to the state is enforced by the borrow checker at
-    ///     compile time.
-    ///   * Outbound messages are produced by
-    ///     [OnMessage::on_message()](crate::core::OnMessage::on_message()) the method and sent to
+    ///     [HasOnMessage::on_message()] method. Sequential processing is crucial to ensure that
+    ///     the actor's state is updated in a consistent manner. Sequential mutable access to the
+    ///     state is enforced by the borrow checker at compile time.
+    ///   * Outbound messages are produced by [HasOnMessage::on_message()] the method and sent to
     ///     the through the corresponding outbound channel to downstream actors.
     ///
     /// Note: It is an async function which returns a future a completion handler. This method is
@@ -103,21 +92,23 @@ pub trait ActorNode {
 }
 
 /// A table to forward outbound messages to message handlers of downstream actors.
-pub type ForwardTable<Prop, State, OutboundHub, Request, M> =
-    HashMap<String, Box<dyn ForwardMessage<Prop, State, OutboundHub, Request, M> + Send + Sync>>;
+pub type ForwardTable<Prop, State, IsOutboundHub, Request, M> = HashMap<
+    String,
+    Box<dyn HasForwardMessage<Prop, State, IsOutboundHub, Request, M> + Send + Sync>,
+>;
 
-pub(crate) struct ActorNodeImpl<Prop, State, OutboundHub, Request, M> {
+pub(crate) struct IsActorNodeImpl<Prop, State, IsOutboundHub, Request, M> {
     pub(crate) name: String,
     pub(crate) prop: Prop,
     pub(crate) state: Option<State>,
     pub(crate) receiver: Option<tokio::sync::mpsc::Receiver<M>>,
-    pub(crate) outbound: OutboundHub,
+    pub(crate) outbound: IsOutboundHub,
     pub(crate) request: Request,
-    pub(crate) forward: ForwardTable<Prop, State, OutboundHub, Request, M>,
+    pub(crate) forward: ForwardTable<Prop, State, IsOutboundHub, Request, M>,
 }
 
-impl<Prop, State, Outbound: OutboundHub, Request, M: InboundMessage>
-    ActorNodeImpl<Prop, State, Outbound, Request, M>
+impl<Prop, State, Outbound: IsOutboundHub, Request, M: IsInboundMessage>
+    IsActorNodeImpl<Prop, State, Outbound, Request, M>
 {
 }
 
@@ -125,10 +116,10 @@ impl<Prop, State, Outbound: OutboundHub, Request, M: InboundMessage>
 impl<
         Prop: std::marker::Send + std::marker::Sync + 'static,
         State: std::marker::Send + std::marker::Sync + 'static,
-        Outbound: OutboundHub,
-        Request: RequestHub<M>,
-        M: InboundMessage,
-    > ActorNode for ActorNodeImpl<Prop, State, Outbound, Request, M>
+        Outbound: IsOutboundHub,
+        Request: IsRequestHub<M>,
+        M: IsInboundMessage,
+    > IsActorNode for IsActorNodeImpl<Prop, State, Outbound, Request, M>
 {
     fn name(&self) -> &String {
         &self.name
@@ -156,7 +147,7 @@ impl<
     }
 }
 
-pub(crate) struct OnMessageMutValues<State, M: InboundMessage> {
+pub(crate) struct OnMessageMutValues<State, M: IsInboundMessage> {
     state: State,
     receiver: tokio::sync::mpsc::Receiver<M>,
     kill: tokio::sync::broadcast::Receiver<()>,
@@ -167,7 +158,7 @@ pub(crate) async fn on_message<
     State,
     Outbound: Sync + Send,
     Request: Sync + Send,
-    M: InboundMessage,
+    M: IsInboundMessage,
 >(
     _actor_name: String,
     prop: &Prop,

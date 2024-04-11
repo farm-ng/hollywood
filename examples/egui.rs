@@ -4,18 +4,17 @@ use hollywood::actors::egui::EguiActor;
 use hollywood::actors::egui::EguiAppFromBuilder;
 use hollywood::actors::egui::GenericEguiBuilder;
 use hollywood::actors::egui::Stream;
-use hollywood::compute::Context;
-use hollywood::core::request::RequestMessage;
-use hollywood::core::*;
-use hollywood_macros::*;
+use hollywood::prelude::*;
 
 #[derive(Clone, Debug)]
-#[actor_inputs(ContentGeneratorInbound,{NullProp, ContentGeneratorState, ContentGeneratorOutbound, NullRequest})]
+#[actor_inputs(
+    ContentGeneratorInbound,
+    {NullProp, ContentGeneratorState, ContentGeneratorOutbound, NullRequest})]
 pub enum ContentGeneratorInboundMessage {
     Tick(f64),
 }
 
-impl OnMessage for ContentGeneratorInboundMessage {
+impl HasOnMessage for ContentGeneratorInboundMessage {
     /// Process the inbound tick message.
     fn on_message(
         self,
@@ -26,11 +25,8 @@ impl OnMessage for ContentGeneratorInboundMessage {
     ) {
         match &self {
             ContentGeneratorInboundMessage::Tick(new_value) => {
-                match state.reset_request.try_recv() {
-                    Ok(_) => {
-                        state.offset = -*new_value;
-                    }
-                    Err(_) => {}
+                if state.reset_request.try_recv().is_ok() {
+                    state.offset = -*new_value;
                 }
 
                 let x = *new_value + state.offset;
@@ -48,7 +44,7 @@ impl OnMessage for ContentGeneratorInboundMessage {
     }
 }
 
-impl InboundMessageNew<f64> for ContentGeneratorInboundMessage {
+impl IsInboundMessageNew<f64> for ContentGeneratorInboundMessage {
     fn new(_inbound_name: String, msg: f64) -> Self {
         ContentGeneratorInboundMessage::Tick(msg)
     }
@@ -121,22 +117,18 @@ impl EguiAppFromBuilder<EguiAppExampleBuilder> for EguiAppExample {
     type State = String;
 }
 use eframe::egui;
+use hollywood::RequestMessage;
 impl eframe::App for EguiAppExample {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        loop {
-            match self.message_recv.try_recv() {
-                Ok(value) => match value.msg {
-                    PlotMessage::SinPlot((x, y)) => {
-                        self.x = x;
-                        self.sin_value = y;
-                    }
-                    PlotMessage::CosPlot((x, y)) => {
-                        self.x = x;
-                        self.cos_value = y;
-                    }
-                },
-                Err(_) => {
-                    break;
+        while let Ok(value) = self.message_recv.try_recv() {
+            match value.msg {
+                PlotMessage::SinPlot((x, y)) => {
+                    self.x = x;
+                    self.sin_value = y;
+                }
+                PlotMessage::CosPlot((x, y)) => {
+                    self.x = x;
+                    self.cos_value = y;
                 }
             }
         }
@@ -169,7 +161,7 @@ pub async fn run_viewer_example() {
     });
 
     // Pipeline configuration
-    let pipeline = hollywood::compute::Context::configure(&mut |context| {
+    let pipeline = Hollywood::configure(&mut |context| {
         // Actor creation:
         // 1. Periodic timer to drive the simulation
         let mut timer = hollywood::actors::Periodic::new_with_period(context, 0.1);
@@ -198,7 +190,9 @@ pub async fn run_viewer_example() {
     });
 
     // The cancel_requester is used to cancel the pipeline.
-    builder.cancel_request_sender = pipeline.cancel_request_sender_template.clone();
+    builder
+        .cancel_request_sender
+        .clone_from(&pipeline.cancel_request_sender_template);
 
     // Plot the pipeline graph to the console.
     pipeline.print_flow_graph();

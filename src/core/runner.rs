@@ -1,20 +1,15 @@
-use crate::core::inbound::InboundHub;
-use crate::core::inbound::InboundMessage;
-use crate::core::outbound::OutboundHub;
-
-use super::actor::ActorNodeImpl;
-use super::actor::ForwardTable;
-use super::request::RequestHub;
-use super::ActorNode;
+use crate::core::actor::IsActorNodeImpl;
+use crate::prelude::*;
+use crate::ForwardTable;
 
 /// Runner executes the pipeline.
 pub trait Runner<
     Prop,
-    Inbound: InboundHub<Prop, State, Outbound, Request, M>,
+    Inbound: IsInboundHub<Prop, State, Outbound, Request, M>,
     State,
-    Outbound: OutboundHub,
-    Request: RequestHub<M>,
-    M: InboundMessage,
+    Outbound: IsOutboundHub,
+    Request: IsRequestHub<M>,
+    M: IsInboundMessage,
 >
 {
     /// Create a new actor to be stored by the context.
@@ -26,7 +21,7 @@ pub trait Runner<
         forward: ForwardTable<Prop, State, Outbound, Request, M>,
         outbound: Outbound,
         request: Request,
-    ) -> Box<dyn ActorNode + Send + Sync>;
+    ) -> Box<dyn IsActorNode + Send + Sync>;
 }
 
 /// The default runner.
@@ -71,11 +66,11 @@ impl<
 
 impl<
         Prop: std::marker::Send + std::marker::Sync + 'static,
-        Inbound: InboundHub<Prop, State, Outbound, Request, M>,
+        Inbound: IsInboundHub<Prop, State, Outbound, Request, M>,
         State: std::marker::Send + std::marker::Sync + 'static,
-        Outbound: OutboundHub,
-        M: InboundMessage,
-        Request: RequestHub<M>,
+        Outbound: IsOutboundHub,
+        M: IsInboundMessage,
+        Request: IsRequestHub<M>,
     > Runner<Prop, Inbound, State, Outbound, Request, M>
     for DefaultRunner<Prop, Inbound, State, Outbound, Request>
 {
@@ -87,8 +82,8 @@ impl<
         forward: ForwardTable<Prop, State, Outbound, Request, M>,
         outbound: Outbound,
         request: Request,
-    ) -> Box<dyn ActorNode + Send + Sync> {
-        Box::new(ActorNodeImpl::<Prop, State, Outbound, Request, M> {
+    ) -> Box<dyn IsActorNode + Send + Sync> {
+        Box::new(IsActorNodeImpl::<Prop, State, Outbound, Request, M> {
             name,
             prop,
             state: Some(init_state),

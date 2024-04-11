@@ -1,11 +1,10 @@
 use hollywood::actors::printer::PrinterProp;
 use hollywood::actors::Nudge;
 use hollywood::actors::Printer;
-use hollywood::compute::Context;
-use hollywood::core::*;
+use hollywood::prelude::*;
 
 pub async fn run_tick_print_example() {
-    let pipeline = Context::configure(&mut |context| {
+    let pipeline = Hollywood::configure(&mut |context| {
         let mut nudge = Nudge::<String>::new(context, "nudge".to_owned());
         let mut nudge_printer = Printer::<String>::from_prop_and_state(
             context,

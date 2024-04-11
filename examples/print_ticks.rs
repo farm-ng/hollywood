@@ -1,12 +1,11 @@
 use hollywood::actors::printer::PrinterProp;
 use hollywood::actors::Periodic;
 use hollywood::actors::Printer;
-use hollywood::compute::Context;
-use hollywood::core::*;
+use hollywood::prelude::*;
 
-///
+/// Run the tick print example
 pub async fn run_tick_print_example() {
-    let pipeline = Context::configure(&mut |context| {
+    let pipeline = Hollywood::configure(&mut |context| {
         let mut timer = Periodic::new_with_period(context, 1.0);
         let mut time_printer = Printer::<f64>::from_prop_and_state(
             context,

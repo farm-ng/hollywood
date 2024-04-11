@@ -118,7 +118,7 @@ pub(crate) fn zip_outbound_n_impl(input: TokenStream) -> TokenStream {
         }
 
         impl<Key: Default +  Debug+Clone+Sync + Send + 'static, #( #params_with_bounds_seq2 ),*>
-            Activate for #outbound_struct<Key, #( #params_seq3 ),*>
+            HasActivate for #outbound_struct<Key, #( #params_seq3 ),*>
         {
             fn extract(&mut self) -> Self {
                 Self {
@@ -132,9 +132,9 @@ pub(crate) fn zip_outbound_n_impl(input: TokenStream) -> TokenStream {
         }
 
         impl<Key:  Default + Debug+Clone+Sync + Send + 'static, #( #params_with_bounds_seq3 ),*>
-            OutboundHub for #outbound_struct<Key, #( #params_seq4 ),*>
+            IsOutboundHub for #outbound_struct<Key, #( #params_seq4 ),*>
         {
-            fn from_context_and_parent(context: &mut Context, actor_name: &str) -> Self {
+            fn from_context_and_parent(context: &mut Hollywood, actor_name: &str) -> Self {
                 Self {
                     zipped: OutboundChannel::<#tuple_struct<Key, #( #params_seq5 ),*>>::new(
                         context,
@@ -189,7 +189,7 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
         Err(err) => return TokenStream::from(err.to_compile_error()),
     };
 
-    let inbound_message_enum = format_ident!("Zip{}InboundMessage", num_fields);
+    let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
     let state_struct = format_ident!("Zip{}State", num_fields);
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
 
@@ -232,7 +232,7 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
                        + Send
                        + 'static,
                        #( #type_with_bounds_seq ),*
-                       > InboundMessageNew<ZipPair<#i, Key, #item>>
+                       > IsInboundMessageNew<ZipPair<#i, Key, #item>>
                        for #inbound_message_enum<Key, #( #type_seq ),*>
                    {
                        fn new(_inbound_name: String, msg: ZipPair<#i, Key, #item>) -> Self {
@@ -262,7 +262,7 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
                 Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord
                 + Sync + Send + 'static,
                 #( #type_with_bounds_seq ),*
-            > InboundMessage for  #inbound_message_enum<Key, #(#type_seq2),*>
+            > IsInboundMessage for  #inbound_message_enum<Key, #(#type_seq2),*>
         {
             type Prop = NullProp;
             type State = #state_struct<Key, #(#type_seq3),*>;
@@ -290,7 +290,7 @@ pub(crate) fn zip_n_impl(input: TokenStream) -> TokenStream {
     let state_struct = format_ident!("Zip{}State", num_fields);
     let inbound_struct = format_ident!("Zip{}Inbound", num_fields);
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
-    let inbound_message_enum = format_ident!("Zip{}InboundMessage", num_fields);
+    let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
 
     let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
     let type_seq2 = type_seq.clone();
@@ -329,7 +329,7 @@ pub(crate) fn zip_n_impl(input: TokenStream) -> TokenStream {
                      + Sync + Send + 'static,
                 #( #type_with_bounds_seq ),*
             >
-            FromPropState<
+            HasFromPropState<
                 NullProp,
                 #inbound_struct<Key, #( #type_seq5), *>,
                 #state_struct<Key, #( #type_seq6), *>,
@@ -364,7 +364,7 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
     let inbound_struct = format_ident!("Zip{}Inbound", num_fields);
     let state_struct = format_ident!("Zip{}State", num_fields);
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
-    let inbound_message_enum = format_ident!("Zip{}InboundMessage", num_fields);
+    let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
 
     let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
     let type_seq4 = type_seq.clone();
@@ -422,7 +422,7 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
                      + Sync + Send + 'static,
                 #( #type_with_bounds_seq ),*
             >
-            InboundHub<
+            IsInboundHub<
                 NullProp,
                 #state_struct<Key, #( #type_seq4),*>,
                 #outbound_struct<Key, #( #type_seq5),*>,
@@ -431,7 +431,7 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
             > for #inbound_struct<Key, #( #type_seq7),*>
         {
             fn from_builder(
-                builder: &mut crate::core::ActorBuilder<
+                builder: &mut ActorBuilder<
                     NullProp,
                     #state_struct<Key, #( #type_seq8),*>,
                     #outbound_struct<Key, #( #type_seq9),*>,
@@ -467,7 +467,7 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
     };
 
     let tuple_struct = format_ident!("Tuple{}", num_fields);
-    let inbound_message_enum = format_ident!("Zip{}InboundMessage", num_fields);
+    let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
 
     let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
 
@@ -521,7 +521,7 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
     let expanded = quote! {
 
         impl<Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord + Sync + Send,
-            #( #type_with_bounds_seq ),*> OnMessage for #inbound_message_enum<Key, #(#type_seq), *>
+            #( #type_with_bounds_seq ),*> HasOnMessage for #inbound_message_enum<Key, #(#type_seq), *>
         {
             fn on_message(
                 self,

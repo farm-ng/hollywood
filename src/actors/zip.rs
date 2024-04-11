@@ -1,23 +1,7 @@
+use crate::prelude::*;
 use std::cmp::Reverse;
 use std::fmt::Debug;
 use std::fmt::Display;
-
-use hollywood_macros::zip_n;
-
-use crate::compute::Context;
-use crate::core::request::NullRequest;
-use crate::core::Activate;
-use crate::core::Actor;
-use crate::core::DefaultRunner;
-use crate::core::FromPropState;
-use crate::core::InboundChannel;
-use crate::core::InboundHub;
-use crate::core::InboundMessage;
-use crate::core::InboundMessageNew;
-use crate::core::NullProp;
-use crate::core::OnMessage;
-use crate::core::OutboundChannel;
-use crate::core::OutboundHub;
 
 /// Type of the Xth inbound channel for the zip actor.
 #[derive(Clone, Debug, Default)]

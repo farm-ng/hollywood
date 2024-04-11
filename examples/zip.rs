@@ -5,11 +5,10 @@ use hollywood::actors::zip::Zip2State;
 use hollywood::actors::zip::ZipPair;
 use hollywood::actors::Printer;
 use hollywood::actors::Zip2;
-use hollywood::compute::Context;
-use hollywood::core::*;
+use hollywood::prelude::*;
 
 pub async fn run_tick_print_example() {
-    let pipeline = Context::configure(&mut |context| {
+    let pipeline = Hollywood::configure(&mut |context| {
         let mut periodic = periodic::Periodic::new_with_period(context, 1.0);
 
         let mut zip = Zip2::<u64, String, String>::from_prop_and_state(

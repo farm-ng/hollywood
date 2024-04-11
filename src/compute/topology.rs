@@ -1,11 +1,7 @@
-use std::collections::BTreeSet;
-
-use petgraph::stable_graph::StableDiGraph;
-
-use crate::core::InboundChannel;
-use crate::core::InboundMessage;
-use crate::core::OutboundChannel;
 use crate::introspect::flow_graph::FlowGraph;
+use crate::prelude::*;
+use petgraph::stable_graph::StableDiGraph;
+use std::collections::BTreeSet;
 
 // A node in a compute graph.
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -111,7 +107,7 @@ impl Topology {
             }
             count += 1;
         }
-        self.graph[node_idx].name = unique_name.clone();
+        self.graph[node_idx].name.clone_from(&unique_name.clone());
 
         unique_name
     }
@@ -151,7 +147,7 @@ impl Topology {
     pub(crate) fn connect<
         T0: Clone + std::fmt::Debug + Sync + Send + 'static,
         T1: Clone + std::fmt::Debug + Sync + Send + 'static,
-        M: InboundMessage,
+        M: IsInboundMessage,
     >(
         &mut self,
         outbound: &mut OutboundChannel<T0>,

@@ -1,18 +1,12 @@
+use crate::core::connection::request_connection::RequestConnection;
+use crate::core::connection::RequestConnectionEnum;
+use crate::prelude::*;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::compute::Context;
-
-use super::connection::request_connection::RequestConnection;
-use super::connection::RequestConnectionEnum;
-use super::Activate;
-use super::InboundChannel;
-use super::InboundMessage;
-use super::InboundMessageNew;
-
 /// A request hub is used to send requests to other actors which will reply later.
-pub trait RequestHub<M: InboundMessage>: Send + Sync + 'static + Activate {
+pub trait IsRequestHub<M: IsInboundMessage>: Send + Sync + 'static + HasActivate {
     /// Create a new request hub for an actor.
     fn from_parent_and_sender(actor_name: &str, sender: &tokio::sync::mpsc::Sender<M>) -> Self;
 }
@@ -94,7 +88,7 @@ pub struct ReplyMessage<Reply> {
 }
 
 /// RequestChannel is a connections for messages which are sent to a downstream actor.
-pub struct RequestChannel<Request, Reply, M: InboundMessage> {
+pub struct RequestChannel<Request, Reply, M: IsInboundMessage> {
     /// Unique name of the request channel.
     pub name: String,
     /// Name of the actor that sends the request messages.
@@ -104,7 +98,7 @@ pub struct RequestChannel<Request, Reply, M: InboundMessage> {
     pub(crate) sender: tokio::sync::mpsc::Sender<M>,
 }
 
-impl<Request, Reply, M: InboundMessage> Activate for RequestChannel<Request, Reply, M> {
+impl<Request, Reply, M: IsInboundMessage> HasActivate for RequestChannel<Request, Reply, M> {
     fn extract(&mut self) -> Self {
         Self {
             name: self.name.clone(),
@@ -122,7 +116,7 @@ impl<Request, Reply, M: InboundMessage> Activate for RequestChannel<Request, Rep
 impl<
         Request: Clone + Send + Sync + std::fmt::Debug + 'static,
         Reply: Clone + Send + Sync + std::fmt::Debug + 'static,
-        M: InboundMessageNew<ReplyMessage<Reply>>,
+        M: IsInboundMessageNew<ReplyMessage<Reply>>,
     > RequestChannel<Request, Reply, M>
 {
     /// Create a new request channel for actor in provided context.    
@@ -136,9 +130,9 @@ impl<
     }
 
     /// Connect the request channel from this actor to the inbound channel of another actor.
-    pub fn connect<Me: InboundMessageNew<RequestMessage<Request, Reply>>>(
+    pub fn connect<Me: IsInboundMessageNew<RequestMessage<Request, Reply>>>(
         &mut self,
-        _ctx: &mut Context,
+        _ctx: &mut Hollywood,
         inbound: &mut InboundChannel<RequestMessage<Request, Reply>, Me>,
     ) {
         self.connection_register.push(Arc::new(RequestConnection {
@@ -171,13 +165,13 @@ impl<
 #[derive(Debug, Clone, Default)]
 pub struct NullRequest {}
 
-impl<M: InboundMessage> RequestHub<M> for NullRequest {
+impl<M: IsInboundMessage> IsRequestHub<M> for NullRequest {
     fn from_parent_and_sender(_actor_name: &str, _sender: &tokio::sync::mpsc::Sender<M>) -> Self {
         Self {}
     }
 }
 
-impl Activate for NullRequest {
+impl HasActivate for NullRequest {
     fn extract(&mut self) -> Self {
         Self {}
     }
