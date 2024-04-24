@@ -7,15 +7,23 @@ use drawille::Canvas;
 
 /// Inbound channels for the draw actor
 #[derive(Clone, Debug)]
-#[actor_inputs(DrawInbound, {NullProp, DrawState, NullOutbound, NullRequest})]
+#[actor_inputs(DrawInbound, 
+    {
+        NullProp, 
+        DrawState, 
+        NullOutbound, 
+        NullOutRequests,
+        NullInRequestMessage
+    })]
 pub enum DrawInboundMessage {
     /// Tuple of true pos, true range and filter state
     Zipped(Tuple3<u64, Stamped<Robot>, Stamped<f64>, NamedFilterState>),
 }
 
 /// Draw actor for one-dim-robot example.
-#[actor(DrawInboundMessage)]
-pub type DrawActor = Actor<NullProp, DrawInbound, DrawState, NullOutbound, NullRequest>;
+#[actor(DrawInboundMessage, NullInRequestMessage)]
+pub type DrawActor =
+    Actor<NullProp, DrawInbound, NullInRequests, DrawState, NullOutbound, NullOutRequests>;
 
 impl HasOnMessage for DrawInboundMessage {
     /// Forward the message to the correct handler method of [DrawState].
@@ -24,7 +32,7 @@ impl HasOnMessage for DrawInboundMessage {
         _prop: &NullProp,
         state: &mut Self::State,
         _outbound: &Self::OutboundHub,
-        _request: &Self::RequestHub,
+        _request: &Self::OutRequestHub,
     ) {
         match self {
             DrawInboundMessage::Zipped(msg) => {

@@ -1,26 +1,35 @@
-use crate::core::actor::IsActorNodeImpl;
+use crate::core::actor::ActorNodeImpl;
+use crate::core::actor::ForwardRequestTable;
 use crate::prelude::*;
 use crate::ForwardTable;
 
 /// Runner executes the pipeline.
 pub trait Runner<
     Prop,
-    Inbound: IsInboundHub<Prop, State, Outbound, Request, M>,
+    Inbound: IsInboundHub<Prop, State, Outbound, OutRequest, M, R>,
+    InRequest,
     State,
     Outbound: IsOutboundHub,
-    Request: IsRequestHub<M>,
+    OutRequest: IsOutRequestHub<M>,
     M: IsInboundMessage,
+    R: IsInRequestMessage,
 >
 {
     /// Create a new actor to be stored by the context.
     fn new_actor_node(
         name: String,
         prop: Prop,
-        state: State,
-        receiver: tokio::sync::mpsc::Receiver<M>,
-        forward: ForwardTable<Prop, State, Outbound, Request, M>,
-        outbound: Outbound,
-        request: Request,
+        init_state: State,
+        forward_receiver_outbound: (
+            ForwardTable<Prop, State, Outbound, OutRequest, M>,
+            tokio::sync::mpsc::UnboundedReceiver<M>,
+            Outbound,
+        ),
+        forward_receiver_request: (
+            ForwardRequestTable<Prop, State, Outbound, OutRequest, R>,
+            tokio::sync::mpsc::UnboundedReceiver<R>,
+            OutRequest,
+        ),
     ) -> Box<dyn IsActorNode + Send + Sync>;
 }
 
@@ -28,20 +37,22 @@ pub trait Runner<
 pub struct DefaultRunner<
     Prop,
     Inbound: Send + Sync,
+    InRequest,
     State,
     Outbound: Send + Sync + 'static,
     Request: Send + Sync + 'static,
 > {
-    phantom: std::marker::PhantomData<(Prop, Inbound, State, Outbound, Request)>,
+    phantom: std::marker::PhantomData<(Prop, Inbound, InRequest, State, Outbound, Request)>,
 }
 
 impl<
         Prop,
         State,
         Inbound: Send + Sync,
+        InRequest,
         Outbound: Send + Sync + 'static,
         Request: Send + Sync + 'static,
-    > Default for DefaultRunner<Prop, Inbound, State, Outbound, Request>
+    > Default for DefaultRunner<Prop, Inbound, InRequest, State, Outbound, Request>
 {
     fn default() -> Self {
         Self::new()
@@ -52,9 +63,10 @@ impl<
         Prop,
         State,
         Inbound: Send + Sync,
+        InRequest,
         Outbound: Send + Sync + 'static,
         Request: Send + Sync + 'static,
-    > DefaultRunner<Prop, Inbound, State, Outbound, Request>
+    > DefaultRunner<Prop, Inbound, InRequest, State, Outbound, Request>
 {
     /// Create a new default runner.
     pub fn new() -> Self {
@@ -66,31 +78,41 @@ impl<
 
 impl<
         Prop: std::marker::Send + std::marker::Sync + 'static,
-        Inbound: IsInboundHub<Prop, State, Outbound, Request, M>,
+        Inbound: IsInboundHub<Prop, State, Outbound, OutRequest, M, R>,
+        InRequest,
         State: std::marker::Send + std::marker::Sync + 'static,
         Outbound: IsOutboundHub,
+        R: IsInRequestMessage,
         M: IsInboundMessage,
-        Request: IsRequestHub<M>,
-    > Runner<Prop, Inbound, State, Outbound, Request, M>
-    for DefaultRunner<Prop, Inbound, State, Outbound, Request>
+        OutRequest: IsOutRequestHub<M>,
+    > Runner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>
+    for DefaultRunner<Prop, Inbound, InRequest, State, Outbound, OutRequest>
 {
     fn new_actor_node(
         name: String,
         prop: Prop,
         init_state: State,
-        receiver: tokio::sync::mpsc::Receiver<M>,
-        forward: ForwardTable<Prop, State, Outbound, Request, M>,
-        outbound: Outbound,
-        request: Request,
+        forward_receiver_outbound: (
+            ForwardTable<Prop, State, Outbound, OutRequest, M>,
+            tokio::sync::mpsc::UnboundedReceiver<M>,
+            Outbound,
+        ),
+        forward_receiver_request: (
+            ForwardRequestTable<Prop, State, Outbound, OutRequest, R>,
+            tokio::sync::mpsc::UnboundedReceiver<R>,
+            OutRequest,
+        ),
     ) -> Box<dyn IsActorNode + Send + Sync> {
-        Box::new(IsActorNodeImpl::<Prop, State, Outbound, Request, M> {
+        Box::new(ActorNodeImpl::<Prop, State, Outbound, OutRequest, M, R> {
             name,
             prop,
             state: Some(init_state),
-            receiver: Some(receiver),
-            outbound,
-            forward,
-            request,
+            forward: forward_receiver_outbound.0,
+            receiver: Some(forward_receiver_outbound.1),
+            outbound: forward_receiver_outbound.2,
+            forward_request: forward_receiver_request.0,
+            request_receiver: Some(forward_receiver_request.1),
+            out_request: forward_receiver_request.2,
         })
     }
 }

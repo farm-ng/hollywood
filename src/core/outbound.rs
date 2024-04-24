@@ -118,14 +118,14 @@ impl<T> HasActivate for OutboundChannel<T> {
 
 #[derive(Clone, Debug)]
 pub(crate) struct OutboundConnection<Out, M: IsInboundMessage> {
-    pub(crate) sender: tokio::sync::mpsc::Sender<M>,
+    pub(crate) sender: tokio::sync::mpsc::UnboundedSender<M>,
     pub(crate) inbound_channel: String,
     pub(crate) phantom: std::marker::PhantomData<Out>,
 }
 
 #[derive(Clone)]
 pub(crate) struct OutboundConnectionWithAdapter<Out, InT, M: IsInboundMessage> {
-    pub(crate) sender: tokio::sync::mpsc::Sender<M>,
+    pub(crate) sender: tokio::sync::mpsc::UnboundedSender<M>,
     pub(crate) inbound_channel: String,
     pub(crate) adapter: fn(Out) -> InT,
 }
@@ -151,7 +151,7 @@ impl<Out: Send + Sync, M: IsInboundMessageNew<Out>> IsGenericConnection<Out>
         let msg = M::new(self.inbound_channel.clone(), msg);
         let c = self.sender.clone();
         let handler = tokio::spawn(async move {
-            match c.send(msg).await {
+            match c.send(msg) {
                 Ok(_) => {}
                 Err(SendError(_)) => {
                     println!("SendError");
@@ -169,7 +169,7 @@ impl<Out: Send + Sync, InT, M: IsInboundMessageNew<InT>> IsGenericConnection<Out
         let msg = M::new(self.inbound_channel.clone(), (self.adapter)(msg));
         let c = self.sender.clone();
         let handler = tokio::spawn(async move {
-            match c.send(msg).await {
+            match c.send(msg) {
                 Ok(_) => {}
                 Err(SendError(_)) => {
                     println!("SendError");

@@ -1,7 +1,8 @@
 use crate::prelude::*;
+use std::sync::Arc;
 
 /// The inbound hub is a collection of inbound channels.
-pub trait IsInboundHub<
+pub trait IsInRequestHub<
     Prop,
     State,
     IsOutboundHub,
@@ -19,39 +20,60 @@ pub trait IsInboundHub<
 
 /// An empty inbound hub - for actors with no inbound channels.
 #[derive(Debug, Clone)]
-pub struct NullInbound {}
+pub struct NullInRequests {}
 
 impl<
         Prop,
         State,
         IsOutboundHub,
-        InRequestMessage: IsInRequestMessage,
-        Message: IsInboundMessage,
-        Request: IsOutRequestHub<Message>,
-    > IsInboundHub<Prop, State, IsOutboundHub, Request, Message, InRequestMessage> for NullInbound
+        NullInRequestMessage: IsInRequestMessage,
+        NullMessage: IsInboundMessage,
+        Request: IsOutRequestHub<NullMessage>,
+    > IsInRequestHub<Prop, State, IsOutboundHub, Request, NullMessage, NullInRequestMessage>
+    for NullInRequests
 {
     fn from_builder(
-        _builder: &mut ActorBuilder<Prop, State, IsOutboundHub, Request, Message, InRequestMessage>,
+        _builder: &mut ActorBuilder<
+            Prop,
+            State,
+            IsOutboundHub,
+            Request,
+            NullMessage,
+            NullInRequestMessage,
+        >,
         _actor_name: &str,
     ) -> Self {
         Self {}
     }
 }
 
-/// Inbound channel to receive messages of a specific type `T`.
+/// InRequest channel to receive messages of a specific type `T`.
 ///
-/// Inbound channels can be connected to one or more outbound channels of upstream actors.
-#[derive(Debug, Clone)]
-pub struct InboundChannel<T, M: IsInboundMessage> {
+/// InRequest channels can be connected to one or more outbound channels of upstream actors.
+#[derive(Debug)]
+pub struct InRequestChannel<T, M: IsInRequestMessage> {
     /// Unique identifier of the inbound channel.
     pub name: String,
     /// Name of the actor that the inbound messages are for.
     pub actor_name: String,
-    pub(crate) sender: tokio::sync::mpsc::UnboundedSender<M>,
+    pub(crate) sender: Arc<tokio::sync::mpsc::UnboundedSender<M>>,
     pub(crate) phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: Clone + Send + Sync + std::fmt::Debug + 'static, M: IsInboundMessage> InboundChannel<T, M> {
+impl<T: Send + Sync + std::fmt::Debug + 'static, M: IsInRequestMessage> Clone
+    for InRequestChannel<T, M>
+{
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            actor_name: self.actor_name.clone(),
+            sender: self.sender.clone(),
+            phantom: std::marker::PhantomData {},
+        }
+    }
+}
+
+impl<T: Send + Sync + std::fmt::Debug + 'static, M: IsInRequestMessage> InRequestChannel<T, M> {
     /// Creates a new inbound channel.
     pub fn new(
         context: &mut Hollywood,
@@ -63,14 +85,14 @@ impl<T: Clone + Send + Sync + std::fmt::Debug + 'static, M: IsInboundMessage> In
         Self {
             name,
             actor_name: actor_name.to_owned(),
-            sender: sender.clone(),
+            sender: Arc::new(sender.clone()),
             phantom: std::marker::PhantomData {},
         }
     }
 }
 
-/// Inbound messages to be received by the actor.
-pub trait IsInboundMessage: Send + Sync + Clone + 'static {
+/// InRequest messages to be received by the actor.
+pub trait IsInRequestMessage: Send + Sync + 'static {
     /// Prop type of the receiving actor.
     type Prop;
 
@@ -84,11 +106,11 @@ pub trait IsInboundMessage: Send + Sync + Clone + 'static {
     type OutRequestHub: Send + Sync + 'static;
 
     /// Name of the inbound channel that this message is for.
-    fn inbound_channel(&self) -> String;
+    fn in_request_channel(&self) -> String;
 }
 
 /// Customization point for processing inbound messages.
-pub trait HasOnMessage: IsInboundMessage {
+pub trait HasOnRequestMessage: IsInRequestMessage {
     /// Process the inbound message - user code with main business logic goes here.
     fn on_message(
         self,
@@ -99,16 +121,17 @@ pub trait HasOnMessage: IsInboundMessage {
     );
 }
 
-/// Trait for creating inbound messages of compatible types `T`.
-pub trait IsInboundMessageNew<T>:
-    std::fmt::Debug + Send + Sync + Clone + 'static + IsInboundMessage
+/// Trait for creating in-request messages of compatible types `T`.
+pub trait IsInRequestMessageNew<T>:
+    std::fmt::Debug + Send + Sync + 'static + IsInRequestMessage
 {
     /// Create a new inbound message from the inbound channel name and the message value of type `T`.
     fn new(inbound_channel: String, value: T) -> Self;
 }
 
 /// Message forwarder.
-pub trait HasForwardMessage<Prop, State, IsOutboundHub, IsRequestHub, M: IsInboundMessage> {
+pub trait HasForwardRequestMessage<Prop, State, IsOutboundHub, IsRequestHub, M: IsInRequestMessage>
+{
     /// Forward the message to the HasOnMessage customization point.
     fn forward_message(
         &self,
@@ -121,18 +144,19 @@ pub trait HasForwardMessage<Prop, State, IsOutboundHub, IsRequestHub, M: IsInbou
 }
 
 impl<
-        T: Clone + Send + Sync + std::fmt::Debug + 'static,
+        T: Send + Sync + std::fmt::Debug + 'static,
         Prop,
         State,
         OutboundHub,
         OutRequestHub,
-        M: HasOnMessage<
+        M: HasOnRequestMessage<
             Prop = Prop,
             State = State,
             OutboundHub = OutboundHub,
             OutRequestHub = OutRequestHub,
         >,
-    > HasForwardMessage<Prop, State, OutboundHub, OutRequestHub, M> for InboundChannel<T, M>
+    > HasForwardRequestMessage<Prop, State, OutboundHub, OutRequestHub, M>
+    for InRequestChannel<T, M>
 {
     fn forward_message(
         &self,
@@ -148,29 +172,23 @@ impl<
 
 /// Null message is a marker type for actors with no inbound channels.
 #[derive(Debug)]
-pub enum NullMessage {
+pub enum NullInRequestMessage {
     /// Null message.
     Null,
 }
 
-impl Clone for NullMessage {
-    fn clone(&self) -> Self {
-        Self::Null
-    }
-}
-
-impl IsInboundMessage for NullMessage {
+impl IsInRequestMessage for NullInRequestMessage {
     type Prop = NullProp;
     type State = NullState;
     type OutboundHub = NullOutbound;
     type OutRequestHub = NullOutRequests;
 
-    fn inbound_channel(&self) -> String {
+    fn in_request_channel(&self) -> String {
         "".to_owned()
     }
 }
 
-impl HasOnMessage for NullMessage {
+impl HasOnRequestMessage for NullInRequestMessage {
     fn on_message(
         self,
         _prop: &Self::Prop,

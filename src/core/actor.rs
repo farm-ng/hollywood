@@ -11,38 +11,43 @@ use tokio::select;
 ///
 /// The generic actor struct is merely a user-facing facade to configure network connections. Actual
 /// properties, state and inbound routing is stored in the [IsActorNode] structs.
-pub struct GenericActor<Prop, Inbound, State, Outbound: IsOutboundHub, Request, Run> {
+pub struct GenericActor<Prop, Inbound, InRequest, State, Outbound: IsOutboundHub, OutRequest, Run> {
     /// unique identifier of the actor
     pub actor_name: String,
     /// a collection of inbound channels
     pub inbound: Inbound,
+    /// a collection of inbound channels
+    pub in_requests: InRequest,
     /// a collection of outbound channels
     pub outbound: Outbound,
     /// a collection of request channels    
-    pub request: Request,
+    pub out_requests: OutRequest,
     pub(crate) phantom: std::marker::PhantomData<(Prop, State, Run)>,
 }
 
 /// An actor of the default runner type, but otherwise generic over its, prop, state, inbound
 /// and outbound channel types.
-pub type Actor<Prop, Inbound, State, IsOutboundHub, Request> = GenericActor<
+pub type Actor<Prop, Inbound, InRequest, State, Outbound, OutRequest> = GenericActor<
     Prop,
     Inbound,
+    InRequest,
     State,
-    IsOutboundHub,
-    Request,
-    DefaultRunner<Prop, Inbound, State, IsOutboundHub, Request>,
+    Outbound,
+    OutRequest,
+    DefaultRunner<Prop, Inbound, InRequest, State, Outbound, OutRequest>,
 >;
 
 /// New actor from properties and state.
 pub trait HasFromPropState<
     Prop,
-    Inbound: IsInboundHub<Prop, State, Outbound, Request, M>,
+    Inbound: IsInboundHub<Prop, State, Outbound, OutRequest, M, R>,
+    InRequest: IsInRequestHub<Prop, State, Outbound, OutRequest, M, R>,
     State,
     Outbound: IsOutboundHub,
     M: IsInboundMessage,
-    Request: IsRequestHub<M>,
-    Run: Runner<Prop, Inbound, State, Outbound, Request, M>,
+    R: IsInRequestMessage,
+    OutRequest: IsOutRequestHub<M>,
+    Run: Runner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>,
 >
 {
     /// Produces a hint for the actor. The name_hint is used as a base to
@@ -56,16 +61,22 @@ pub trait HasFromPropState<
         context: &mut Hollywood,
         prop: Prop,
         initial_state: State,
-    ) -> GenericActor<Prop, Inbound, State, Outbound, Request, Run> {
+    ) -> GenericActor<Prop, Inbound, InRequest, State, Outbound, OutRequest, Run> {
         let actor_name = context.add_new_unique_name(Self::name_hint(&prop).to_string());
         let out = Outbound::from_context_and_parent(context, &actor_name);
 
-        let mut builder = ActorBuilder::new(context, &actor_name, prop, initial_state);
+        let mut builder = ActorBuilder::<Prop, State, Outbound, OutRequest, M, R>::new(
+            context,
+            &actor_name,
+            prop,
+            initial_state,
+        );
 
-        let request = Request::from_parent_and_sender(&actor_name, &builder.sender);
+        let out_request = OutRequest::from_parent_and_sender(&actor_name, &builder.sender);
 
         let inbound = Inbound::from_builder(&mut builder, &actor_name);
-        builder.build::<Inbound, Run>(inbound, out, request)
+        let in_request = InRequest::from_builder(&mut builder, &actor_name);
+        builder.build::<Inbound, InRequest, Run>(inbound, in_request, out, out_request)
     }
 }
 
@@ -92,23 +103,29 @@ pub trait IsActorNode {
 }
 
 /// A table to forward outbound messages to message handlers of downstream actors.
-pub type ForwardTable<Prop, State, IsOutboundHub, Request, M> = HashMap<
+pub type ForwardTable<Prop, State, OutboundHub, Request, M> =
+    HashMap<String, Box<dyn HasForwardMessage<Prop, State, OutboundHub, Request, M> + Send + Sync>>;
+
+/// A table to forward outbound messages to message handlers of downstream actors.
+pub type ForwardRequestTable<Prop, State, OutRequestHub, Request, R> = HashMap<
     String,
-    Box<dyn HasForwardMessage<Prop, State, IsOutboundHub, Request, M> + Send + Sync>,
+    Box<dyn HasForwardRequestMessage<Prop, State, OutRequestHub, Request, R> + Send + Sync>,
 >;
 
-pub(crate) struct IsActorNodeImpl<Prop, State, IsOutboundHub, Request, M> {
+pub(crate) struct ActorNodeImpl<Prop, State, OutboundHub, OutRequestHub, M, R> {
     pub(crate) name: String,
     pub(crate) prop: Prop,
     pub(crate) state: Option<State>,
-    pub(crate) receiver: Option<tokio::sync::mpsc::Receiver<M>>,
-    pub(crate) outbound: IsOutboundHub,
-    pub(crate) request: Request,
-    pub(crate) forward: ForwardTable<Prop, State, IsOutboundHub, Request, M>,
+    pub(crate) forward: ForwardTable<Prop, State, OutboundHub, OutRequestHub, M>,
+    pub(crate) receiver: Option<tokio::sync::mpsc::UnboundedReceiver<M>>,
+    pub(crate) outbound: OutboundHub,
+    pub(crate) forward_request: ForwardRequestTable<Prop, State, OutboundHub, OutRequestHub, R>,
+    pub(crate) request_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<R>>,
+    pub(crate) out_request: OutRequestHub,
 }
 
-impl<Prop, State, Outbound: IsOutboundHub, Request, M: IsInboundMessage>
-    IsActorNodeImpl<Prop, State, Outbound, Request, M>
+impl<Prop, State, Outbound: IsOutboundHub, Request, R: IsInRequestMessage, M: IsInboundMessage>
+    ActorNodeImpl<Prop, State, Outbound, Request, M, R>
 {
 }
 
@@ -117,9 +134,10 @@ impl<
         Prop: std::marker::Send + std::marker::Sync + 'static,
         State: std::marker::Send + std::marker::Sync + 'static,
         Outbound: IsOutboundHub,
-        Request: IsRequestHub<M>,
+        Request: IsOutRequestHub<M>,
+        R: IsInRequestMessage,
         M: IsInboundMessage,
-    > IsActorNode for IsActorNodeImpl<Prop, State, Outbound, Request, M>
+    > IsActorNode for ActorNodeImpl<Prop, State, Outbound, Request, M, R>
 {
     fn name(&self) -> &String {
         &self.name
@@ -127,7 +145,7 @@ impl<
 
     async fn run(&mut self, kill: tokio::sync::broadcast::Receiver<()>) {
         self.outbound.activate();
-        self.request.activate();
+        self.out_request.activate();
 
         let (state, recv) = on_message(
             self.name.clone(),
@@ -135,11 +153,13 @@ impl<
             OnMessageMutValues {
                 state: self.state.take().unwrap(),
                 receiver: self.receiver.take().unwrap(),
+                request_receiver: self.request_receiver.take().unwrap(),
                 kill,
             },
             &self.forward,
+            &self.forward_request,
             &self.outbound,
-            &self.request,
+            &self.out_request,
         )
         .await;
         self.state = Some(state);
@@ -147,9 +167,10 @@ impl<
     }
 }
 
-pub(crate) struct OnMessageMutValues<State, M: IsInboundMessage> {
+pub(crate) struct OnMessageMutValues<State, M: IsInboundMessage, R: IsInRequestMessage> {
     state: State,
-    receiver: tokio::sync::mpsc::Receiver<M>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<M>,
+    request_receiver: tokio::sync::mpsc::UnboundedReceiver<R>,
     kill: tokio::sync::broadcast::Receiver<()>,
 }
 
@@ -159,14 +180,16 @@ pub(crate) async fn on_message<
     Outbound: Sync + Send,
     Request: Sync + Send,
     M: IsInboundMessage,
+    R: IsInRequestMessage,
 >(
     _actor_name: String,
     prop: &Prop,
-    mut values: OnMessageMutValues<State, M>,
+    mut values: OnMessageMutValues<State, M, R>,
     forward: &ForwardTable<Prop, State, Outbound, Request, M>,
+    forward_request: &ForwardRequestTable<Prop, State, Outbound, Request, R>,
     outbound: &Outbound,
     request: &Request,
-) -> (State, tokio::sync::mpsc::Receiver<M>) {
+) -> (State, tokio::sync::mpsc::UnboundedReceiver<M>) {
     loop {
         select! {
             _ = values.kill.recv() => {
@@ -186,6 +209,18 @@ pub(crate) async fn on_message<
                     continue;
                 }
                 t.unwrap().forward_message(prop, &mut values.state, outbound, request, m);
+            },
+            m = values.request_receiver.recv() => {
+                if m.is_some() {
+                    let m = m.unwrap();
+                    let t = forward_request.get(&m.in_request_channel());
+                    if t.is_none() {
+                        continue;
+                    }
+                    t.unwrap().forward_message(prop, &mut values.state, outbound, request, m);
+                } else{
+                    tokio::task::yield_now().await;
+                }
             }
         }
     }

@@ -10,20 +10,20 @@ pub(crate) trait GenericRequestConnection<T>: Send + Sync {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RequestConnection<T, M: IsInboundMessage> {
-    pub(crate) sender: tokio::sync::mpsc::Sender<M>,
+pub(crate) struct RequestConnection<T, M: IsInRequestMessage> {
+    pub(crate) sender: tokio::sync::mpsc::UnboundedSender<M>,
     pub(crate) inbound_channel: String,
     pub(crate) phantom: PhantomData<T>,
 }
 
-impl<T: Send + Sync, M: IsInboundMessageNew<T>> GenericRequestConnection<T>
+impl<T: Send + Sync, M: IsInRequestMessageNew<T>> GenericRequestConnection<T>
     for RequestConnection<T, M>
 {
     fn send_impl(&self, msg: T) {
         let msg = M::new(self.inbound_channel.clone(), msg);
         let c = self.sender.clone();
         let handler = tokio::spawn(async move {
-            match c.send(msg).await {
+            match c.send(msg) {
                 Ok(_) => {}
                 Err(SendError(_)) => {
                     println!("SendError");

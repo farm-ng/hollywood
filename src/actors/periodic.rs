@@ -11,9 +11,10 @@ use std::sync::Arc;
 pub type Periodic = GenericActor<
     PeriodicProp,
     NullInbound,
+    NullInRequests,
     PeriodicState,
     PeriodicOutbound,
-    NullRequest,
+    NullOutRequests,
     PeriodicRunner,
 >;
 
@@ -31,6 +32,8 @@ impl Periodic {
                 time_elapsed: 0.0,
             },
         )
+
+        // todo!()
     }
 }
 
@@ -38,10 +41,12 @@ impl
     HasFromPropState<
         PeriodicProp,
         NullInbound,
+        NullInRequests,
         PeriodicState,
         PeriodicOutbound,
-        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
-        NullRequest,
+        NullMessage,
+        NullInRequestMessage,
+        NullOutRequests,
         PeriodicRunner,
     > for Periodic
 {
@@ -116,10 +121,12 @@ impl
     Runner<
         PeriodicProp,
         NullInbound,
+        NullInRequests,
         PeriodicState,
         PeriodicOutbound,
-        NullRequest,
-        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
+        NullOutRequests,
+        NullMessage,
+        NullInRequestMessage,
     > for PeriodicRunner
 {
     /// Create a new actor node.
@@ -127,31 +134,47 @@ impl
         name: String,
         prop: PeriodicProp,
         state: PeriodicState,
-        _receiver: tokio::sync::mpsc::Receiver<
-            NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
-        >,
-        _forward: std::collections::HashMap<
-            String,
-            Box<
-                dyn HasForwardMessage<
-                        PeriodicProp,
-                        PeriodicState,
-                        PeriodicOutbound,
-                        NullRequest,
-                        NullMessage<PeriodicProp, PeriodicState, PeriodicOutbound, NullRequest>,
-                    > + Send
-                    + Sync,
+        forward_receiver_outbound: (
+            std::collections::HashMap<
+                String,
+                Box<
+                    dyn HasForwardMessage<
+                            PeriodicProp,
+                            PeriodicState,
+                            PeriodicOutbound,
+                            NullOutRequests,
+                            NullMessage,
+                        > + Send
+                        + Sync,
+                >,
             >,
-        >,
-        outbound: PeriodicOutbound,
-        _request: NullRequest,
+            tokio::sync::mpsc::UnboundedReceiver<NullMessage>,
+            PeriodicOutbound,
+        ),
+        _forward_receiver_request: (
+            std::collections::HashMap<
+                String,
+                Box<
+                    dyn HasForwardRequestMessage<
+                            PeriodicProp,
+                            PeriodicState,
+                            PeriodicOutbound,
+                            NullOutRequests,
+                            NullInRequestMessage,
+                        > + Send
+                        + Sync,
+                >,
+            >,
+            tokio::sync::mpsc::UnboundedReceiver<NullInRequestMessage>,
+            NullOutRequests,
+        ),
     ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(PeriodicActor {
             name: name.clone(),
             prop,
             init_state: state.clone(),
             state: None,
-            outbound: Some(outbound),
+            outbound: Some(forward_receiver_outbound.2),
         })
     }
 }

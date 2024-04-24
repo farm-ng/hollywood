@@ -79,14 +79,6 @@
 //!     pub alpha: f64,
 //! }
 //!
-//! impl Default for MovingAverageProp {
-//!     fn default() -> Self {
-//!         MovingAverageProp {
-//!             alpha: 0.5,
-//!         }
-//!     }
-//! }
-//!
 //! /// State of the MovingAverage actor.
 //! #[derive(Clone, Debug, Default)]
 //! pub struct MovingAverageState {
@@ -112,10 +104,15 @@
 //! ```ignore
 //! /// Inbound message for the MovingAverage actor.
 //! #[derive(Clone, Debug)]
-//! #[actor_inputs(MovingAverageInbound, {MovingAverageProp,
-//!                                       MovingAverageState,
-//!                                       MovingAverageOutbound,
-//!                                       NullRequest})]
+//! #[actor_inputs(
+//!     MovingAverageInbound,
+//!     {
+//!         MovingAverageProp,
+//!         MovingAverageState,
+//!         MovingAverageOutbound,
+//!         NullOutRequests,
+//!         NullInRequestMessage
+//!     })]
 //! pub enum MovingAverageMessage {
 //!     /// a float value
 //!     Value(f64),
@@ -128,7 +125,7 @@
 //!         prop: &Self::Prop,
 //!         state: &mut Self::State,
 //!         outbound: &Self::Outbound,
-//!         _request: &Self::RequestHub)
+//!         _request: &Self::OutRequestHub)
 //!     {
 //!         match &self {
 //!             MovingAverageMessage::Value(new_value) => {
@@ -164,9 +161,10 @@
 //! type MovingAverage = Actor<
 //!     MovingAverageProp,
 //!     MovingAverageInbound,
+//!     NullInRequests,
 //!     MovingAverageOutbound,  
 //!     MovingAverageState,
-//!     NullRequest>;
+//!     NullOutRequests>;
 //! ```
 //!
 //! ### Configure and execute the pipeline
@@ -193,7 +191,7 @@
 //!         context,
 //!         MovingAverageProp {
 //!             alpha: 0.3,
-//!             ..Default::default()
+//!             timeout: 5.0,
 //!         },
 //!         MovingAverageState::default(),
 //!     );
@@ -290,30 +288,39 @@ pub use crate::core::actor::ForwardTable;
 pub use crate::core::actor::GenericActor;
 pub use crate::core::actor::HasFromPropState;
 pub use crate::core::actor::IsActorNode;
+pub use crate::core::actor_builder::ActorBuilder;
 pub use crate::core::connection::ConnectionEnum;
+pub use crate::core::in_request::HasForwardRequestMessage;
+pub use crate::core::in_request::HasOnRequestMessage;
+pub use crate::core::in_request::InRequestChannel;
+pub use crate::core::in_request::IsInRequestHub;
+pub use crate::core::in_request::IsInRequestMessage;
+pub use crate::core::in_request::IsInRequestMessageNew;
+pub use crate::core::in_request::NullInRequestMessage;
+pub use crate::core::in_request::NullInRequests;
 pub use crate::core::inbound::HasForwardMessage;
+pub use crate::core::inbound::HasOnMessage;
+pub use crate::core::inbound::InboundChannel;
+pub use crate::core::inbound::IsInboundHub;
+pub use crate::core::inbound::IsInboundMessage;
+pub use crate::core::inbound::IsInboundMessageNew;
+pub use crate::core::inbound::NullInbound;
+pub use crate::core::inbound::NullMessage;
+pub use crate::core::out_request::IsOutRequestHub;
+pub use crate::core::out_request::IsRequestWithReplyChannel;
+pub use crate::core::out_request::NullOutRequests;
+pub use crate::core::out_request::OutRequestChannel;
+pub use crate::core::out_request::ReplyMessage;
+pub use crate::core::out_request::RequestWithReplyChannel;
+pub use crate::core::outbound::HasActivate;
 pub use crate::core::outbound::IsGenericConnection;
 pub use crate::core::outbound::IsOutboundHub;
-pub use crate::core::request::IsRequestHub;
-pub use crate::core::request::ReplyMessage;
-pub use crate::core::request::RequestChannel;
-pub use crate::core::request::RequestMessage;
+pub use crate::core::outbound::NullOutbound;
+pub use crate::core::outbound::OutboundChannel;
+pub use crate::core::runner::DefaultRunner;
 pub use crate::core::runner::Runner;
-pub use core::actor_builder::ActorBuilder;
-pub use core::inbound::HasOnMessage;
-pub use core::inbound::InboundChannel;
-pub use core::inbound::IsInboundHub;
-pub use core::inbound::IsInboundMessage;
-pub use core::inbound::IsInboundMessageNew;
-pub use core::inbound::NullInbound;
-pub use core::inbound::NullMessage;
-pub use core::outbound::HasActivate;
-pub use core::outbound::NullOutbound;
-pub use core::outbound::OutboundChannel;
-pub use core::request::NullRequest;
-pub use core::runner::DefaultRunner;
-pub use core::value::NullProp;
-pub use core::value::NullState;
+pub use crate::core::value::NullProp;
+pub use crate::core::value::NullState;
 
 /// The compute context and compute graph.
 pub mod compute;
@@ -336,7 +343,7 @@ pub mod example_actors;
 /// following order:
 ///
 /// 1. [actor_outputs](macros::actor_outputs)
-/// 2. [actor_requests](macros::actor_requests)
+/// 2. [actor_out_requests](macros::actor_out_requests)
 /// 3. [actor_inputs](macros::actor_inputs) which depends on 1. and 2.
 /// 4. [actor](macros::actor) which depends on 1., 2. and 3.
 ///
@@ -344,116 +351,12 @@ pub mod example_actors;
 /// refer to the examples in the root of the [crate](crate#example-moving-average).
 pub mod macros {
 
-    /// This macro generates the boilerplate for the outbound hub struct it is applied to.
-    ///
-    /// Macro template:
-    ///
-    /// ``` text
-    /// #[actor_outputs]
-    /// pub struct OUTBOUND {
-    ///     pub CHANNEL0: OutboundChannel<TYPE0>,
-    ///     pub CHANNEL1: OutboundChannel<TYPE1>,
-    ///     ...
-    /// }
-    /// ```
-    ///
-    /// Here, OUTBOUND is the user-specified name of the struct. The struct shall be defined right
-    /// after the macro invocation. (Indeed, these types of macros are called "attribute macros".
-    /// They are applied to the item directly following them, in this case a struct.) The outbound
-    /// struct consists of a zero, one or more outbound channels. Each outbound channel has a
-    /// user-specified name CHANNEL* and a user specified type TYPE*.
-    ///
-    /// Effect: The macro generates the [IsOutboundHub](crate::IsOutboundHub) and
-    /// [HasActivate](crate::HasActivate) implementations for the provided struct OUTBOUND.
-    ///
-    /// This is the first of three macros to define an actor. The other two are [macro@actor_inputs]
-    /// and [macro@actor].
-    ///
     pub use hollywood_macros::actor_outputs;
 
-    /// This macro generates the boilerplate for the request hub struct it is applied to.
-    ///
-    /// Macro template:
-    ///
-    /// ``` text
-    /// #[actor_requests]
-    /// pub struct REQUEST {
-    ///     pub CHANNEL0: RequestChannel<REQ_TYPE0, REPL_TYPE0, M0>,
-    ///     pub CHANNEL1: RequestChannel<REQ_TYPE1, REPL_TYPE2, M1>,
-    ///     ...
-    /// }
-    /// ```
-    ///
-    /// Here, REQUEST is the user-specified name of the struct. The struct shall be defined right
-    /// after the macro invocation. The request struct consists of one or more request channels.
-    /// Each request channel has name CHANNEL*, a request type REQ_TYPE*, a reply type REPL_TYPE*,
-    /// and a message type M*.
-    ///
-    /// Effect: The macro generates the [IsRequestHub](crate::IsRequestHub) and
-    /// [HasActivate](crate::HasActivate) implementations for the provided struct REQUEST.
-    ///
-    pub use hollywood_macros::actor_requests;
+    pub use hollywood_macros::actor_out_requests;
 
-    /// This macro generates the boilerplate for the inbound hub of an actor.
-    ///
-    /// Macro template:
-    ///
-    /// ``` text
-    /// #[derive(Clone, Debug)]
-    /// actor_inputs(INBOUND,(PROP, STATE, OUTBOUND));
-    /// pub enum INBOUND_MESSAGE {
-    ///   VARIANT0(TYPE0),
-    ///   VARIANT1(TYPE1),
-    ///   ...
-    /// }
-    /// ```
-    ///
-    /// INBOUND_MESSAGE is the user-specified name of an enum which shall be defined right below the
-    /// macro invocation. The enum shall consist of a zero, one or more message variants. Each
-    /// variant has a user-specified name VARIENT* and type TYPE*.
-    ///
-    /// Prerequisite:
-    ///   - The OUTBOUND struct is defined and implements [IsOutboundHub](crate::IsOutboundHub)
-    ///     and [HasActivate](crate::HasActivate), typically using the [macro@actor_outputs] macro.
-    ///  - The REQUEST struct is defined and implements [IsRequestHub](crate::IsRequestHub) and
-    ///     [HasActivate](crate::HasActivate), e.g. using the [actor_requests] macro.
-    ///   - The PROP and STATE structs are defined.
-    ///
-    /// Effects:
-    ///   - The macro defines the struct INBOUND that contains an inbound channel field for each
-    ///     variant of the INBOUND_MESSAGE enum, and implements the
-    ///     [IsInboundHub](crate::IsInboundHub) trait for it.
-    ///   - Implements the [IsInboundMessage](crate::IsInboundMessage) trait for INBOUND_MESSAGE.
-    ///
     pub use hollywood_macros::actor_inputs;
 
-    /// This macro generates the boilerplate to define an new actor type.
-    ///
-    /// Macro template:
-    ///
-    /// ``` text
-    /// #[actor(INBOUND_MESSAGE)]
-    /// type ACTOR = Actor<PROP, INBOUND, STATE, OUTBOUND, REQUEST>;
-    /// ```
-    ///
-    /// Here, ACTOR is the user-specified name of the actor type. The actor type shall be defined
-    /// right after the macro invocation as an alias of [Actor](crate::Actor).
-    ///
-    /// Prerequisites:
-    ///   - The OUTBOUND struct is defined and implements [IsOutboundHub](crate::IsOutboundHub) and
-    ///     [HasActivate](crate::HasActivate), e.g. using the [actor_outputs] macro.
-    ///   - The REQUEST struct is defined and implements [IsRequestHub](crate::IsRequestHub) and
-    ///     [HasActivate](crate::HasActivate), e.g. using the [actor_requests] macro.
-    ///   - The INBOUND_MESSAGE enum is defined and implements
-    ///     [IsInboundMessage](crate::IsInboundMessage), as well as the INBOUND struct is defined
-    ///     and implements the [IsInboundHub](crate::IsInboundHub) trait, e.g through the
-    ///     [actor_inputs] macro.
-    ///   - The PROP and STATE structs are defined.
-    ///
-    /// Effect:
-    ///   - This macro implements the [HasFromPropState](crate::HasFromPropState) trait for the ACTOR
-    ///     type.
-    ///
     pub use hollywood_macros::actor;
 
     pub use hollywood_macros::zip_n;
@@ -467,22 +370,31 @@ pub mod prelude {
     pub use crate::DefaultRunner;
     pub use crate::HasActivate;
     pub use crate::HasForwardMessage;
+    pub use crate::HasForwardRequestMessage;
     pub use crate::HasFromPropState;
     pub use crate::HasOnMessage;
+    pub use crate::HasOnRequestMessage;
     pub use crate::Hollywood;
+    pub use crate::InRequestChannel;
     pub use crate::InboundChannel;
     pub use crate::IsActorNode;
     pub use crate::IsGenericConnection;
+    pub use crate::IsInRequestHub;
+    pub use crate::IsInRequestMessage;
+    pub use crate::IsInRequestMessageNew;
     pub use crate::IsInboundHub;
     pub use crate::IsInboundMessage;
     pub use crate::IsInboundMessageNew;
+    pub use crate::IsOutRequestHub;
     pub use crate::IsOutboundHub;
-    pub use crate::IsRequestHub;
+    pub use crate::IsRequestWithReplyChannel;
+    pub use crate::NullInRequestMessage;
+    pub use crate::NullInRequests;
     pub use crate::NullInbound;
     pub use crate::NullMessage;
+    pub use crate::NullOutRequests;
     pub use crate::NullOutbound;
     pub use crate::NullProp;
-    pub use crate::NullRequest;
     pub use crate::NullState;
     pub use crate::OutboundChannel;
 }

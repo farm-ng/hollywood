@@ -82,9 +82,9 @@ async fn run_robot_example() {
             .true_robot
             .connect(context, &mut truth_printer.inbound.printable);
 
-        sim.request
+        sim.out_requests
             .ping_pong
-            .connect(context, &mut filter.inbound.ping_pong_request);
+            .connect(context, &mut filter.in_requests.ping_pong_request);
         context.register_cancel_requester(&mut sim.outbound.cancel_request);
 
         filter

@@ -9,11 +9,14 @@ pub mod actor_builder;
 /// Inbound
 pub mod inbound;
 
+/// Inbound requests
+pub mod in_request;
+
 /// Outbound
 pub mod outbound;
 
-/// Request
-pub mod request;
+/// Outbound requests
+pub mod out_request;
 
 /// Connection
 pub mod connection;

@@ -14,7 +14,7 @@ pub async fn run_moving_average_example() {
             context,
             MovingAverageProp {
                 alpha: 0.3,
-                ..Default::default()
+                timeout: 5.0,
             },
             MovingAverageState {
                 moving_average: 0.0,

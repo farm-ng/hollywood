@@ -19,7 +19,15 @@ impl Default for PrinterProp {
 
 /// Inbound message for the printer actor.
 #[derive(Clone, Debug)]
-#[actor_inputs(PrinterInbound<T>, {PrinterProp, NullState, NullOutbound, NullRequest})]
+#[actor_inputs(
+    PrinterInbound<T>,
+    {
+        PrinterProp,
+        NullState,
+        NullOutbound,
+        NullOutRequests,
+        NullInRequestMessage
+    })]
 pub enum PrinterInboundMessage<T: Default + Debug + Display + Clone + Sync + Send + 'static> {
     /// Printable message.
     Printable(T),
@@ -33,7 +41,7 @@ impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> HasOnMessage
         prop: &PrinterProp,
         _state: &mut Self::State,
         _outputs: &Self::OutboundHub,
-        _request: &Self::RequestHub,
+        _request: &Self::OutRequestHub,
     ) {
         match self {
             PrinterInboundMessage::Printable(printable) => {
@@ -52,17 +60,27 @@ impl<T: Default + Debug + Display + Clone + Sync + Send + 'static> IsInboundMess
 }
 
 /// Printer actor.
-pub type Printer<T> = Actor<PrinterProp, PrinterInbound<T>, NullState, NullOutbound, NullRequest>;
+pub type Printer<T> =
+    Actor<PrinterProp, PrinterInbound<T>, NullInRequests, NullState, NullOutbound, NullOutRequests>;
 
 impl<T: Clone + Sync + Default + Send + 'static + Debug + Display>
     HasFromPropState<
         PrinterProp,
         PrinterInbound<T>,
+        NullInRequests,
         NullState,
         NullOutbound,
         PrinterInboundMessage<T>,
-        NullRequest,
-        DefaultRunner<PrinterProp, PrinterInbound<T>, NullState, NullOutbound, NullRequest>,
+        NullInRequestMessage,
+        NullOutRequests,
+        DefaultRunner<
+            PrinterProp,
+            PrinterInbound<T>,
+            NullInRequests,
+            NullState,
+            NullOutbound,
+            NullOutRequests,
+        >,
     > for Printer<T>
 {
     fn name_hint(prop: &PrinterProp) -> String {

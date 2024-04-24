@@ -18,9 +18,10 @@ pub struct NudgeProp<Item: Clone> {
 pub type Nudge<Item> = GenericActor<
     NudgeProp<Item>,
     NullInbound,
+    NullInRequests,
     NullState,
     NudgeOutbound<Item>,
-    NullRequest,
+    NullOutRequests,
     NudgeRunner,
 >;
 
@@ -35,10 +36,12 @@ impl<Item: Default + Sync + Send + Clone + Debug + 'static>
     HasFromPropState<
         NudgeProp<Item>,
         NullInbound,
+        NullInRequests,
         NullState,
         NudgeOutbound<Item>,
-        NullMessage<NudgeProp<Item>, NullState, NudgeOutbound<Item>, NullRequest>,
-        NullRequest,
+        NullMessage,
+        NullInRequestMessage,
+        NullOutRequests,
         NudgeRunner,
     > for Nudge<Item>
 {
@@ -61,10 +64,12 @@ impl<Item: Default + Sync + Send + Clone + Debug + 'static>
     Runner<
         NudgeProp<Item>,
         NullInbound,
+        NullInRequests,
         NullState,
         NudgeOutbound<Item>,
-        NullRequest,
-        NullMessage<NudgeProp<Item>, NullState, NudgeOutbound<Item>, NullRequest>,
+        NullOutRequests,
+        NullMessage,
+        NullInRequestMessage,
     > for NudgeRunner
 {
     /// Create a new actor node.
@@ -72,31 +77,47 @@ impl<Item: Default + Sync + Send + Clone + Debug + 'static>
         name: String,
         prop: NudgeProp<Item>,
         state: NullState,
-        _receiver: tokio::sync::mpsc::Receiver<
-            NullMessage<NudgeProp<Item>, NullState, NudgeOutbound<Item>, NullRequest>,
-        >,
-        _forward: std::collections::HashMap<
-            String,
-            Box<
-                dyn HasForwardMessage<
-                        NudgeProp<Item>,
-                        NullState,
-                        NudgeOutbound<Item>,
-                        NullRequest,
-                        NullMessage<NudgeProp<Item>, NullState, NudgeOutbound<Item>, NullRequest>,
-                    > + Send
-                    + Sync,
+        forward_receiver_outbound: (
+            std::collections::HashMap<
+                String,
+                Box<
+                    dyn HasForwardMessage<
+                            NudgeProp<Item>,
+                            NullState,
+                            NudgeOutbound<Item>,
+                            NullOutRequests,
+                            NullMessage,
+                        > + Send
+                        + Sync,
+                >,
             >,
-        >,
-        outbound: NudgeOutbound<Item>,
-        _request: NullRequest,
+            tokio::sync::mpsc::UnboundedReceiver<NullMessage>,
+            NudgeOutbound<Item>,
+        ),
+        _forward_receiver_request: (
+            std::collections::HashMap<
+                String,
+                Box<
+                    dyn HasForwardRequestMessage<
+                            NudgeProp<Item>,
+                            NullState,
+                            NudgeOutbound<Item>,
+                            NullOutRequests,
+                            NullInRequestMessage,
+                        > + Send
+                        + Sync,
+                >,
+            >,
+            tokio::sync::mpsc::UnboundedReceiver<NullInRequestMessage>,
+            NullOutRequests,
+        ),
     ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(NudgeActor::<Item> {
             name: name.clone(),
             prop,
             init_state: state.clone(),
             state: None,
-            outbound: Some(outbound),
+            outbound: Some(forward_receiver_outbound.2),
         })
     }
 }

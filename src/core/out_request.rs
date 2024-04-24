@@ -6,22 +6,25 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// A request hub is used to send requests to other actors which will reply later.
-pub trait IsRequestHub<M: IsInboundMessage>: Send + Sync + 'static + HasActivate {
+pub trait IsOutRequestHub<M: IsInboundMessage>: Send + Sync + 'static + HasActivate {
     /// Create a new request hub for an actor.
-    fn from_parent_and_sender(actor_name: &str, sender: &tokio::sync::mpsc::Sender<M>) -> Self;
+    fn from_parent_and_sender(
+        actor_name: &str,
+        sender: &tokio::sync::mpsc::UnboundedSender<M>,
+    ) -> Self;
 }
 
 /// A request message with a reply channel.
-#[derive(Debug, Clone, Default)]
-pub struct RequestMessage<Request, Reply> {
+#[derive(Debug)]
+pub struct RequestWithReplyChannel<Request, Reply> {
     /// The request.
     pub request: Request,
     /// The reply channel.
-    pub reply_channel: Option<Arc<tokio::sync::oneshot::Sender<ReplyMessage<Reply>>>>,
+    pub reply_channel: tokio::sync::oneshot::Sender<ReplyMessage<Reply>>,
 }
 
 /// A trait for request messages.
-pub trait IsRequestMessage: Send + Sync + 'static + Clone + Debug + Default {
+pub trait IsRequestWithReplyChannel: Send + Sync + 'static + Debug {
     /// The request type.
     type Request;
     /// The reply type.
@@ -29,15 +32,15 @@ pub trait IsRequestMessage: Send + Sync + 'static + Clone + Debug + Default {
 }
 
 impl<
-        Request: Send + Sync + 'static + Clone + Debug + Default,
-        Reply: Send + Sync + 'static + Clone + Debug + Default,
-    > IsRequestMessage for RequestMessage<Request, Reply>
+        Request: Send + Sync + 'static + Clone + Debug,
+        Reply: Send + Sync + 'static + Clone + Debug,
+    > IsRequestWithReplyChannel for RequestWithReplyChannel<Request, Reply>
 {
     type Request = Reply;
     type Reply = Reply;
 }
 
-impl<Request, Reply: Debug> RequestMessage<Request, Reply> {
+impl<Request, Reply: Debug> RequestWithReplyChannel<Request, Reply> {
     /// Reply to the request immediately.
     pub fn reply<F>(self, func: F)
     where
@@ -53,14 +56,9 @@ impl<Request, Reply: Debug> RequestMessage<Request, Reply> {
 
     /// Reply to the request later using the provided reply channel.
     pub fn reply_later(self) -> ReplyLater<Request, Reply> {
-        let reply_channel = Arc::into_inner(
-            self.reply_channel
-                .expect("self.reply must not be None. This is a bug in the hollywood crate."),
-        )
-        .expect("self.reply must have a ref count of 1. This is a bug in the hollywood crate.");
         ReplyLater::<Request, Reply> {
             request: self.request,
-            reply_channel,
+            reply_channel: self.reply_channel,
         }
     }
 }
@@ -87,18 +85,18 @@ pub struct ReplyMessage<Reply> {
     pub reply: Reply,
 }
 
-/// RequestChannel is a connections for messages which are sent to a downstream actor.
-pub struct RequestChannel<Request, Reply, M: IsInboundMessage> {
+/// OutRequestChannel is a connections for messages which are sent to a downstream actor.
+pub struct OutRequestChannel<Request, Reply, M: IsInboundMessage> {
     /// Unique name of the request channel.
     pub name: String,
     /// Name of the actor that sends the request messages.
     pub actor_name: String,
 
-    pub(crate) connection_register: RequestConnectionEnum<RequestMessage<Request, Reply>>,
-    pub(crate) sender: tokio::sync::mpsc::Sender<M>,
+    pub(crate) connection_register: RequestConnectionEnum<RequestWithReplyChannel<Request, Reply>>,
+    pub(crate) sender: tokio::sync::mpsc::UnboundedSender<M>,
 }
 
-impl<Request, Reply, M: IsInboundMessage> HasActivate for RequestChannel<Request, Reply, M> {
+impl<Request, Reply, M: IsInboundMessage> HasActivate for OutRequestChannel<Request, Reply, M> {
     fn extract(&mut self) -> Self {
         Self {
             name: self.name.clone(),
@@ -117,10 +115,14 @@ impl<
         Request: Clone + Send + Sync + std::fmt::Debug + 'static,
         Reply: Clone + Send + Sync + std::fmt::Debug + 'static,
         M: IsInboundMessageNew<ReplyMessage<Reply>>,
-    > RequestChannel<Request, Reply, M>
+    > OutRequestChannel<Request, Reply, M>
 {
     /// Create a new request channel for actor in provided context.    
-    pub fn new(name: String, actor_name: &str, sender: &tokio::sync::mpsc::Sender<M>) -> Self {
+    pub fn new(
+        name: String,
+        actor_name: &str,
+        sender: &tokio::sync::mpsc::UnboundedSender<M>,
+    ) -> Self {
         Self {
             name: name.clone(),
             actor_name: actor_name.to_owned(),
@@ -130,13 +132,13 @@ impl<
     }
 
     /// Connect the request channel from this actor to the inbound channel of another actor.
-    pub fn connect<Me: IsInboundMessageNew<RequestMessage<Request, Reply>>>(
+    pub fn connect<Me: IsInRequestMessageNew<RequestWithReplyChannel<Request, Reply>>>(
         &mut self,
         _ctx: &mut Hollywood,
-        inbound: &mut InboundChannel<RequestMessage<Request, Reply>, Me>,
+        inbound: &mut InRequestChannel<RequestWithReplyChannel<Request, Reply>, Me>,
     ) {
         self.connection_register.push(Arc::new(RequestConnection {
-            sender: inbound.sender.clone(),
+            sender: inbound.sender.as_ref().clone(),
             inbound_channel: inbound.name.clone(),
             phantom: PhantomData {},
         }));
@@ -144,10 +146,10 @@ impl<
 
     /// Send a message to the connected inbound channels of other actors.
     pub fn send_request(&self, msg: Request) {
-        let (sender, receiver) = tokio::sync::oneshot::channel();
-        let msg = RequestMessage {
+        let (reply_sender, reply_receiver) = tokio::sync::oneshot::channel();
+        let msg = RequestWithReplyChannel {
             request: msg,
-            reply_channel: Some(Arc::new(sender)),
+            reply_channel: reply_sender,
         };
         self.connection_register.send(msg);
 
@@ -155,23 +157,36 @@ impl<
         let name = self.name.clone();
 
         tokio::spawn(async move {
-            let r = receiver.await.unwrap();
-            sender.send(M::new(name, r)).await
+            let r = match reply_receiver.await {
+                Ok(r) => r,
+                Err(e) => {
+                    panic!("Error: {:?}", e);
+                }
+            };
+            match sender.send(M::new(name, r)) {
+                Ok(_) => {}
+                Err(e) => {
+                    panic!("Error: {:?}", e);
+                }
+            }
         });
     }
 }
 
 /// An empty request hub - used for actors that do not have any request channels.
 #[derive(Debug, Clone, Default)]
-pub struct NullRequest {}
+pub struct NullOutRequests {}
 
-impl<M: IsInboundMessage> IsRequestHub<M> for NullRequest {
-    fn from_parent_and_sender(_actor_name: &str, _sender: &tokio::sync::mpsc::Sender<M>) -> Self {
+impl<M: IsInboundMessage> IsOutRequestHub<M> for NullOutRequests {
+    fn from_parent_and_sender(
+        _actor_name: &str,
+        _sender: &tokio::sync::mpsc::UnboundedSender<M>,
+    ) -> Self {
         Self {}
     }
 }
 
-impl HasActivate for NullRequest {
+impl HasActivate for NullOutRequests {
     fn extract(&mut self) -> Self {
         Self {}
     }

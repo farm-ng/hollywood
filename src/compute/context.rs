@@ -12,8 +12,8 @@ use std::sync::Arc;
 pub struct Hollywood {
     pub(crate) actors: Vec<Box<dyn IsActorNode + Send>>,
     pub(crate) topology: Topology,
-    pub(crate) cancel_request_sender_template: tokio::sync::mpsc::Sender<CancelRequest>,
-    pub(crate) cancel_request_receiver: tokio::sync::mpsc::Receiver<CancelRequest>,
+    pub(crate) cancel_request_sender_template: tokio::sync::mpsc::UnboundedSender<CancelRequest>,
+    pub(crate) cancel_request_receiver: tokio::sync::mpsc::UnboundedReceiver<CancelRequest>,
 }
 
 impl Hollywood {
@@ -31,7 +31,9 @@ impl Hollywood {
     ///
     /// Upon receiving a cancel request the registered outbound channel, the execution of the
     /// pipeline will be stopped.
-    pub fn get_cancel_request_sender(&mut self) -> tokio::sync::mpsc::Sender<CancelRequest> {
+    pub fn get_cancel_request_sender(
+        &mut self,
+    ) -> tokio::sync::mpsc::UnboundedSender<CancelRequest> {
         self.cancel_request_sender_template.clone()
     }
 
@@ -51,7 +53,7 @@ impl Hollywood {
 
     fn new() -> Self {
         let (cancel_request_sender_template, cancel_request_receiver) =
-            tokio::sync::mpsc::channel(1);
+            tokio::sync::mpsc::unbounded_channel();
         Self {
             actors: vec![],
             topology: Topology::new(),

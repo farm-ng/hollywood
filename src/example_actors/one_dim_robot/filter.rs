@@ -1,7 +1,7 @@
 use crate::example_actors::one_dim_robot::RangeMeasurementModel;
 use crate::example_actors::one_dim_robot::Stamped;
 use crate::prelude::*;
-use crate::RequestMessage;
+use crate::RequestWithReplyChannel;
 use hollywood_macros::actor;
 use hollywood_macros::actor_inputs;
 use hollywood_macros::actor_outputs;
@@ -10,20 +10,66 @@ use std::fmt::Display;
 
 use super::sim::PingPong;
 
+#[derive(Debug)]
+/// Measurement model for the range measurement.
+pub enum FilterInRequestMessage {
+    /// Request
+    PingPongRequest(RequestWithReplyChannel<f64, PingPong>),
+}
+
+impl HasOnRequestMessage for FilterInRequestMessage {
+    fn on_message(
+        self,
+        _prop: &Self::Prop,
+        state: &mut Self::State,
+        _outbound: &Self::OutboundHub,
+        _request: &Self::OutRequestHub,
+    ) {
+        match self {
+            FilterInRequestMessage::PingPongRequest(request) => {
+                request.reply(|ping| PingPong {
+                    ping,
+                    pong: state.time,
+                });
+            }
+        }
+    }
+}
+
+impl IsInRequestMessageNew<RequestWithReplyChannel<f64, PingPong>> for FilterInRequestMessage {
+    fn new(_inbound_channel: String, request: RequestWithReplyChannel<f64, PingPong>) -> Self {
+        FilterInRequestMessage::PingPongRequest(request)
+    }
+}
+
+impl IsInRequestMessage for FilterInRequestMessage {
+    type Prop = NullProp;
+
+    type State = FilterState;
+
+    type OutboundHub = FilterOutbound;
+
+    type OutRequestHub = NullOutRequests;
+
+    fn in_request_channel(&self) -> String {
+        "ping_pong_request".to_owned()
+    }
+}
+
 /// Inbound channels for the filter actor.
 #[derive(Clone, Debug)]
-#[actor_inputs(FilterInbound,{NullProp, FilterState, FilterOutbound, NullRequest})]
+#[actor_inputs(FilterInbound,{NullProp, FilterState, FilterOutbound, NullOutRequests,
+    FilterInRequestMessage})]
 pub enum FilterInboundMessage {
     /// noisy velocity measurements
     NoisyVelocity(Stamped<f64>),
     /// noisy range measurements
     NoisyRange(Stamped<f64>),
-    /// Request
-    PingPongRequest(RequestMessage<f64, PingPong>),
 }
 
-#[actor(FilterInboundMessage)]
-type Filter = Actor<NullProp, FilterInbound, FilterState, FilterOutbound, NullRequest>;
+#[actor(FilterInboundMessage, FilterInRequestMessage)]
+type Filter =
+    Actor<NullProp, FilterInbound, FilterInRequest, FilterState, FilterOutbound, NullOutRequests>;
 
 impl HasOnMessage for FilterInboundMessage {
     /// Process the inbound message NoisyVelocity or NoisyRange.
@@ -35,7 +81,7 @@ impl HasOnMessage for FilterInboundMessage {
         _prop: &Self::Prop,
         state: &mut Self::State,
         outbound: &Self::OutboundHub,
-        _request: &Self::RequestHub,
+        _request: &Self::OutRequestHub,
     ) {
         match self {
             FilterInboundMessage::NoisyVelocity(v) => {
@@ -43,12 +89,6 @@ impl HasOnMessage for FilterInboundMessage {
             }
             FilterInboundMessage::NoisyRange(r) => {
                 state.update(&r, outbound);
-            }
-            FilterInboundMessage::PingPongRequest(request) => {
-                request.reply(|ping| PingPong {
-                    ping,
-                    pong: state.time,
-                });
             }
         }
     }
@@ -61,12 +101,6 @@ impl IsInboundMessageNew<Stamped<f64>> for FilterInboundMessage {
         } else {
             FilterInboundMessage::NoisyVelocity(msg)
         }
-    }
-}
-
-impl IsInboundMessageNew<RequestMessage<f64, PingPong>> for FilterInboundMessage {
-    fn new(_inbound_channel: String, request: RequestMessage<f64, PingPong>) -> Self {
-        FilterInboundMessage::PingPongRequest(request)
     }
 }
 
@@ -220,4 +254,48 @@ pub struct FilterOutbound {
     pub predicted_state: OutboundChannel<NamedFilterState>,
     /// Publishes the updated state of the filter.
     pub updated_state: OutboundChannel<NamedFilterState>,
+}
+
+/// Inbound channels for the filter actor.
+pub struct FilterInRequest {
+    /// Request channel for the ping_pong_request.
+    pub ping_pong_request:
+        InRequestChannel<RequestWithReplyChannel<f64, PingPong>, FilterInRequestMessage>,
+}
+
+impl
+    IsInRequestHub<
+        NullProp,
+        FilterState,
+        FilterOutbound,
+        NullOutRequests,
+        FilterInboundMessage,
+        FilterInRequestMessage,
+    > for FilterInRequest
+{
+    fn from_builder(
+        builder: &mut ActorBuilder<
+            NullProp,
+            FilterState,
+            FilterOutbound,
+            NullOutRequests,
+            FilterInboundMessage,
+            FilterInRequestMessage,
+        >,
+        actor_name: &str,
+    ) -> Self {
+        let ping_pong_request = InRequestChannel::new(
+            builder.context,
+            actor_name,
+            &builder.request_sender,
+            "ping_pong_request".to_owned(),
+        );
+
+        builder.forward_request.insert(
+            "ping_pong_request".to_owned(),
+            Box::new(ping_pong_request.clone()),
+        );
+
+        Self { ping_pong_request }
+    }
 }

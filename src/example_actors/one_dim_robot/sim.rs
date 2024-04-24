@@ -2,8 +2,8 @@ use crate::example_actors::one_dim_robot::RangeMeasurementModel;
 use crate::example_actors::one_dim_robot::Robot;
 use crate::example_actors::one_dim_robot::Stamped;
 use crate::prelude::*;
+use crate::OutRequestChannel;
 use crate::ReplyMessage;
-use crate::RequestChannel;
 use rand_distr::Distribution;
 use rand_distr::Normal;
 use std::fmt::Debug;
@@ -19,7 +19,15 @@ pub struct PingPong {
 
 /// Inbound channels for the simulation actor.
 #[derive(Clone, Debug)]
-#[actor_inputs(SimInbound, {NullProp, SimState, SimOutbound, SimRequest})]
+#[actor_inputs(
+    SimInbound, 
+    {
+        NullProp, 
+        SimState, 
+        SimOutbound,
+        SimRequest,  
+        NullInRequestMessage
+    })]
 pub enum SimInboundMessage {
     /// Time-stamp message to drive the simulation.
     TimeStamp(f64),
@@ -28,8 +36,8 @@ pub enum SimInboundMessage {
 }
 
 /// Simulation for the one-dimensional Robot.
-#[actor(SimInboundMessage)]
-pub type Sim = Actor<NullProp, SimInbound, SimState, SimOutbound, SimRequest>;
+#[actor(SimInboundMessage, NullInRequestMessage)]
+pub type Sim = Actor<NullProp, SimInbound, NullInRequests, SimState, SimOutbound, SimRequest>;
 
 impl HasOnMessage for SimInboundMessage {
     /// Invokes [SimState::process_time_stamp()] on TimeStamp.
@@ -38,7 +46,7 @@ impl HasOnMessage for SimInboundMessage {
         _prop: &Self::Prop,
         state: &mut Self::State,
         outbound: &Self::OutboundHub,
-        request: &Self::RequestHub,
+        request: &Self::OutRequestHub,
     ) {
         match self {
             SimInboundMessage::TimeStamp(time) => {
@@ -139,7 +147,7 @@ impl SimState {
 
         self.seq += 1;
 
-        if time == 5.0 {
+        if time == 0.1 {
             request.ping_pong.send_request(time);
         }
     }
@@ -163,8 +171,8 @@ pub struct SimOutbound {
 }
 
 /// Request of the simulation actor.
-#[actor_requests]
+#[actor_out_requests]
 pub struct SimRequest {
     /// Check time-stamp of receiver
-    pub ping_pong: RequestChannel<f64, PingPong, SimInboundMessage>,
+    pub ping_pong: OutRequestChannel<f64, PingPong, SimInboundMessage>,
 }

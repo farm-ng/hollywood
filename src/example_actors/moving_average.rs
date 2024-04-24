@@ -19,15 +19,6 @@ pub struct MovingAverageProp {
     pub timeout: f64,
 }
 
-impl Default for MovingAverageProp {
-    fn default() -> Self {
-        MovingAverageProp {
-            alpha: 0.5,
-            timeout: 10.0,
-        }
-    }
-}
-
 /// State of the MovingAverage actor.
 #[derive(Clone, Debug, Default)]
 pub struct MovingAverageState {
@@ -38,7 +29,15 @@ pub struct MovingAverageState {
 /// Inbound message for the MovingAverage actor.
 ///
 #[derive(Clone, Debug)]
-#[actor_inputs(MovingAverageInbound, {MovingAverageProp, MovingAverageState, MovingAverageOutbound, NullRequest})]
+#[actor_inputs(
+    MovingAverageInbound, 
+    {
+        MovingAverageProp, 
+        MovingAverageState, 
+        MovingAverageOutbound, 
+        NullOutRequests,
+        NullInRequestMessage
+    })]
 pub enum MovingAverageMessage {
     /// a float value
     Value(f64),
@@ -51,7 +50,7 @@ impl HasOnMessage for MovingAverageMessage {
         prop: &Self::Prop,
         state: &mut Self::State,
         outbound: &Self::OutboundHub,
-        _request: &Self::RequestHub,
+        _request: &Self::OutRequestHub,
     ) {
         match &self {
             MovingAverageMessage::Value(new_value) => {
@@ -74,14 +73,12 @@ impl IsInboundMessageNew<f64> for MovingAverageMessage {
 
 /// The MovingAverage actor.
 ///
-#[actor(MovingAverageMessage)]
+#[actor(MovingAverageMessage, NullInRequestMessage)]
 type MovingAverage = Actor<
     MovingAverageProp,
     MovingAverageInbound,
+    NullInRequests,
     MovingAverageState,
     MovingAverageOutbound,
-    NullRequest,
+    NullOutRequests,
 >;
-
-/// Manual implementation of the moving average actor
-pub mod manual;

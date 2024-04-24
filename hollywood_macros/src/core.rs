@@ -131,7 +131,7 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
     let request_assignments = fields.iter().map(|field| {
         let field_name = &field.ident;
         quote! {
-            #field_name: RequestChannel::new(
+            #field_name: OutRequestChannel::new(
                 stringify!(#field_name).to_owned(),
                 actor_name,
                 sender,
@@ -161,9 +161,9 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
     let m_type = is_request_type(&field0.ty).unwrap()[2];
 
     let gen = quote! {
-        impl #impl_generics IsRequestHub<#m_type> for #struct_name #ty_generics #where_clause {
+        impl #impl_generics IsOutRequestHub<#m_type> for #struct_name #ty_generics #where_clause {
             fn from_parent_and_sender(
-                actor_name: &str, sender: &tokio::sync::mpsc::Sender<#m_type>
+                actor_name: &str, sender: &tokio::sync::mpsc::UnboundedSender<#m_type>
             ) -> Self {
                 Self {
                     #(#request_assignments),*
@@ -189,14 +189,14 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
     gen.into()
 }
 
-// This function checks if the field's type is RequestChannel<Request, Reply, M>
+// This function checks if the field's type is OutRequestChannel<Request, Reply, M>
 fn is_request_type(ty: &Type) -> Option<[&Type; 3]> {
     if let Type::Path(TypePath {
         path: Path { segments, .. },
         ..
     }) = ty
     {
-        if segments.len() == 1 && segments[0].ident == "RequestChannel" {
+        if segments.len() == 1 && segments[0].ident == "OutRequestChannel" {
             if let PathArguments::AngleBracketed(args) = &segments[0].arguments {
                 if args.args.len() == 3 {
                     let mut pop_iter = args.args.iter();
@@ -222,6 +222,7 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
         state_type,
         output_type,
         request_type,
+        request_message_type,
     } = match parse2::<ActorInbound>(args) {
         Ok(args) => args,
         Err(err) => return err.to_compile_error(),
@@ -328,7 +329,7 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
             type Prop = #prop_type;
             type State = #state_type;
             type OutboundHub = #output_type;
-            type RequestHub = #request_type;
+            type OutRequestHub = #request_type;
 
             fn inbound_channel(&self) -> String {
                 match self {
@@ -342,7 +343,8 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
             #state_type,
             #output_type,
             #request_type,
-            #name #ty_generics> for #struct_name #ty_generics #where_clause
+            #name #ty_generics,
+            #request_message_type> for #struct_name #ty_generics #where_clause
         {
             fn from_builder(
                 builder: &mut ActorBuilder<
@@ -350,8 +352,8 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
                     #state_type,
                     #output_type,
                     #request_type,
-                    #name
-                    #ty_generics
+                    #name #ty_generics,
+                    #request_message_type
                 >,
                 actor_name: &str) -> Self
             {
@@ -370,10 +372,11 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
 
 struct ActorInbound {
     struct_name: Ident,
-    prop_type: Ident,
-    state_type: Ident,
-    output_type: Ident,
-    request_type: Ident,
+    prop_type: Type,
+    state_type: Type,
+    output_type: Type,
+    request_type: Type,
+    request_message_type: Type,
 }
 
 impl Parse for ActorInbound {
@@ -383,38 +386,51 @@ impl Parse for ActorInbound {
         let _: Token![,] = inbound.parse()?;
         let content;
         syn::braced!(content in inbound);
-        let prop_type: Ident = content.parse()?;
+        let prop_type: Type = content.parse()?;
         let _: Token![,] = content.parse()?;
-        let state_type: Ident = content.parse()?;
+        let state_type: Type = content.parse()?;
         let _: Token![,] = content.parse()?;
-        let output_type: Ident = content.parse()?;
+        let output_type: Type = content.parse()?;
         let _: Token![,] = content.parse()?;
-        let request_type: Ident = content.parse()?;
+        let request_type: Type = content.parse()?;
+        let _: Token![,] = content.parse()?;
+        let request_message_type: Type = content.parse()?;
         Ok(ActorInbound {
             struct_name,
             prop_type,
             state_type,
             output_type,
             request_type,
+            request_message_type,
         })
     }
 }
 
 struct ActorArgs {
-    message_type: Ident,
+    request_message_type: Type,
+    message_type: Type,
 }
 
 impl Parse for ActorArgs {
     fn parse(inbound_hub: ParseStream) -> Result<Self> {
-        let message_type: Ident = inbound_hub.parse()?;
-        Ok(ActorArgs { message_type })
+        let message_type: Type = inbound_hub.parse()?;
+        let _: Token![,] = inbound_hub.parse()?;
+        let request_message_type: Type = inbound_hub.parse()?;
+
+        Ok(ActorArgs {
+            message_type,
+            request_message_type,
+        })
     }
 }
 
 /// Documentation is in the hollywood crate.
 pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse inbound
-    let ActorArgs { message_type } = match parse2::<ActorArgs>(attr) {
+    let ActorArgs {
+        message_type,
+        request_message_type,
+    } = match parse2::<ActorArgs>(attr) {
         Ok(args) => args,
         Err(err) => return err.to_compile_error(),
     };
@@ -439,6 +455,7 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut maybe_prop = None;
     let mut maybe_inbounds = None;
+    let mut maybe_in_request = None;
     let mut maybe_state = None;
     let mut maybe_outputs = None;
     let mut maybe_requests = None;
@@ -452,12 +469,12 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
             for segment in type_path.path.segments {
                 if let PathArguments::AngleBracketed(angle_bracketed_args) = segment.arguments {
-                    if angle_bracketed_args.args.len() != 5 {
+                    if angle_bracketed_args.args.len() != 6 {
                         return Error::new_spanned(
                             &angle_bracketed_args,
                             concat!(
-                                "Expected 5 type arguments:",
-                                "Actor<PROP, INBOUNDS, STATE, OUTBOUNDS, REQUESTS>"
+                                "Expected 6 type arguments:",
+                                "Actor<PROP, INBOUNDS, INBOUND_REQUESTS, STATE, OUTBOUNDS, OUTBOUND_REQUESTS>"
                             ),
                         )
                         .to_compile_error()
@@ -465,9 +482,10 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                     maybe_prop = Some(angle_bracketed_args.args[0].clone());
                     maybe_inbounds = Some(angle_bracketed_args.args[1].clone());
-                    maybe_state = Some(angle_bracketed_args.args[2].clone());
-                    maybe_outputs = Some(angle_bracketed_args.args[3].clone());
-                    maybe_requests = Some(angle_bracketed_args.args[4].clone());
+                    maybe_in_request = Some(angle_bracketed_args.args[2].clone());
+                    maybe_state = Some(angle_bracketed_args.args[3].clone());
+                    maybe_outputs = Some(angle_bracketed_args.args[4].clone());
+                    maybe_requests = Some(angle_bracketed_args.args[5].clone());
                 }
             }
         } else {
@@ -481,20 +499,33 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let prop = maybe_prop.unwrap();
     let inbound = maybe_inbounds.unwrap();
+    let in_request = maybe_in_request.unwrap();
     let state_type = maybe_state.unwrap();
     let out = maybe_outputs.unwrap();
-    let requests = maybe_requests.unwrap();
+    let out_requests = maybe_requests.unwrap();
 
-    let runner_type = quote! { DefaultRunner<#prop, #inbound, #state_type,  #out, #requests> };
+    let runner_type = quote! { DefaultRunner<#prop, #inbound,
+    #in_request,
+    #state_type,  #out, #out_requests> };
 
     let gen = quote! {
 
         ///
         #( #attrs )*
-        pub type #actor_name = Actor<#prop, #inbound, #state_type, #out, #requests>;
+        pub type #actor_name = Actor<#prop, #inbound,
+        #in_request,
+         #state_type, #out, #out_requests>;
 
         impl HasFromPropState<
-                #prop, #inbound, #state_type, #out, #message_type, #requests, #runner_type
+                #prop,
+                #inbound,
+                #in_request,
+                #state_type,
+                #out,
+                #message_type,
+                #request_message_type,
+                #out_requests,
+                #runner_type
             > for #actor_name
         {
             fn name_hint(prop: &#prop) -> String {

@@ -19,7 +19,7 @@ impl IsInboundMessage for CancelRequest {
     type Prop = NullProp;
     type State = NullState;
     type OutboundHub = NullOutbound;
-    type RequestHub = NullOutbound;
+    type OutRequestHub = NullOutbound;
 
     /// This messages is only meant to use for the cancel request inbound channel of the pipeline.
     /// Hence, the inbound name is the constant [CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL].
@@ -40,8 +40,8 @@ pub struct Pipeline {
     actors: Vec<Box<dyn IsActorNode + Send>>,
     topology: Topology,
     /// We have this here to keep receiver alive
-    pub cancel_request_sender_template: Option<tokio::sync::mpsc::Sender<CancelRequest>>,
-    cancel_request_receiver: Option<tokio::sync::mpsc::Receiver<CancelRequest>>,
+    pub cancel_request_sender_template: Option<tokio::sync::mpsc::UnboundedSender<CancelRequest>>,
+    cancel_request_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<CancelRequest>>,
 }
 
 impl Pipeline {

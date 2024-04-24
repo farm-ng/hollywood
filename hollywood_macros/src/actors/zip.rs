@@ -267,7 +267,7 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
             type Prop = NullProp;
             type State = #state_struct<Key, #(#type_seq3),*>;
             type OutboundHub = #outbound_struct<Key, #(#type_seq4),*>;
-            type RequestHub = NullRequest;
+            type OutRequestHub = NullOutRequests;
 
             fn inbound_channel(&self) -> String {
                 match self {
@@ -319,9 +319,10 @@ pub(crate) fn zip_n_impl(input: TokenStream) -> TokenStream {
         pub type #zip_struct<Key, #( #type_seq), *> = Actor<
                 NullProp,
                 #inbound_struct<Key, #( #type_seq2), *>,
+                NullInRequests,
                 #state_struct<Key, #( #type_seq3), *>,
                 #outbound_struct<Key, #( #type_seq4), *>,
-                NullRequest,
+                NullOutRequests,
             >;
 
         impl<
@@ -332,16 +333,19 @@ pub(crate) fn zip_n_impl(input: TokenStream) -> TokenStream {
             HasFromPropState<
                 NullProp,
                 #inbound_struct<Key, #( #type_seq5), *>,
+                NullInRequests,
                 #state_struct<Key, #( #type_seq6), *>,
                 #outbound_struct<Key, #( #type_seq7), *>,
                 #inbound_message_enum<Key, #( #type_seq8), *>,
-                NullRequest,
+                NullInRequestMessage,
+                NullOutRequests,
                 DefaultRunner<
                     NullProp,
                     #inbound_struct<Key, #( #type_seq9), *>,
+                    NullInRequests,
                     #state_struct<Key, #( #type_seq10), *>,
                     #outbound_struct<Key, #( #type_seq11), *>,
-                    NullRequest,
+                    NullOutRequests,
                 >,
             > for #zip_struct<Key, #( #type_seq12), *>
         {
@@ -426,8 +430,9 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
                 NullProp,
                 #state_struct<Key, #( #type_seq4),*>,
                 #outbound_struct<Key, #( #type_seq5),*>,
-                NullRequest,
+                NullOutRequests,
                 #inbound_message_enum<Key, #( #type_seq6),*>,
+                NullInRequestMessage,
             > for #inbound_struct<Key, #( #type_seq7),*>
         {
             fn from_builder(
@@ -435,8 +440,9 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
                     NullProp,
                     #state_struct<Key, #( #type_seq8),*>,
                     #outbound_struct<Key, #( #type_seq9),*>,
-                    NullRequest,
+                    NullOutRequests,
                     #inbound_message_enum<Key, #( #type_seq10),*>,
+                    NullInRequestMessage,
                 >,
                 actor_name: &str,
             ) -> Self {
@@ -528,7 +534,7 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
                 _prop: &Self::Prop,
                 state: &mut Self::State,
                 outbound: &Self::OutboundHub,
-                _request: &Self::RequestHub)
+                _request: &Self::OutRequestHub)
             {
                 let check_and_send = |s: &mut Self::State| {
                     #(
