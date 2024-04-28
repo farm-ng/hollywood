@@ -1,12 +1,9 @@
 use crate::prelude::*;
-use crate::CancelRequest;
-use crate::OutRequestChannel;
-use crate::ReplyMessage;
-use crate::RequestWithReplyChannel;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
+use tracing::debug;
 
 /// The inbound message for the egui actor.
 #[derive(Debug)]
@@ -351,7 +348,7 @@ impl<
     > HasOnRequestMessage for EguiInRequestMessage<T, InRequest, InReply, OutRequest, OutReply>
 {
     /// Forward the message to the egui app.
-    fn on_message(
+    fn on_request(
         self,
         _prop: &Self::Prop,
         state: &mut Self::State,
@@ -372,7 +369,6 @@ impl<
         }
         match self {
             EguiInRequestMessage::InRequest(request) => {
-                println!("EguiInRequestMessage::InRequest");
                 if let Some(sender) = &state.forward_in_request_to_egui_app {
                     sender.send(request).unwrap();
                 }
@@ -496,7 +492,8 @@ impl<
         context: &mut Hollywood,
         builder: &Builder,
     ) -> Self {
-        Self::from_prop_and_state(
+        let sender = builder.on_exit_sender();
+        Self::with_on_exit_fn(
             context,
             NullProp {},
             EguiState::<T, RequestWithReplyChannel<InRequest, InReply>, OutRequest, OutReply> {
@@ -505,6 +502,12 @@ impl<
                 forward_out_reply_to_egui_app: Some(builder.out_reply_to_egui_app_sender()),
                 forward_out_request_from_egui_app: Some(builder.out_request_from_egui_app_recv()),
             },
+            Box::new(move || match sender.send(()) {
+                Ok(_) => {}
+                Err(_) => {
+                    debug!("Failed to send on exit message. Likely egui app is already closed.");
+                }
+            }),
         )
     }
 }
@@ -529,6 +532,9 @@ pub trait EguiActorBuilder<
     fn out_request_from_egui_app_recv(
         &self,
     ) -> Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<OutRequest>>>;
+
+    /// Returns on exit sender.
+    fn on_exit_sender(&self) -> tokio::sync::mpsc::UnboundedSender<()>;
 }
 
 /// A generic builder for the egui actor and app.
@@ -560,6 +566,11 @@ pub struct GenericEguiBuilder<
     pub out_request_from_egui_app_recv:
         Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<OutRequest>>>,
 
+    /// On exit sender
+    pub on_exit_sender: tokio::sync::mpsc::UnboundedSender<()>,
+    /// On exit receiver
+    pub on_exit_recv: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<()>>>,
+
     /// Pipeline cancel request sender
     pub cancel_request_sender: Option<tokio::sync::mpsc::UnboundedSender<CancelRequest>>,
 
@@ -585,6 +596,7 @@ impl<
             tokio::sync::mpsc::unbounded_channel();
         let (out_reply_to_egui_app_sender, out_reply_from_actor_recv) =
             tokio::sync::mpsc::unbounded_channel();
+        let (on_exit_sender, on_exit_recv) = tokio::sync::mpsc::unbounded_channel();
 
         Self {
             message_to_egui_app_sender,
@@ -597,6 +609,8 @@ impl<
             out_reply_from_actor_recv,
             cancel_request_sender: None,
             config,
+            on_exit_sender,
+            on_exit_recv: Arc::new(Mutex::new(on_exit_recv)),
         }
     }
 }
@@ -628,6 +642,10 @@ impl<
         &self,
     ) -> Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<OutRequest>>> {
         self.out_request_from_egui_app_recv.clone()
+    }
+
+    fn on_exit_sender(&self) -> tokio::sync::mpsc::UnboundedSender<()> {
+        self.on_exit_sender.clone()
     }
 }
 

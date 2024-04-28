@@ -1,9 +1,11 @@
 use crate::core::connection::request_connection::RequestConnection;
 use crate::core::connection::RequestConnectionEnum;
 use crate::prelude::*;
+use linear_type::Linear;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use tracing::warn;
 
 /// A request hub is used to send requests to other actors which will reply later.
 pub trait IsOutRequestHub<M: IsInboundMessage>: Send + Sync + 'static + HasActivate {
@@ -15,12 +17,28 @@ pub trait IsOutRequestHub<M: IsInboundMessage>: Send + Sync + 'static + HasActiv
 }
 
 /// A request message with a reply channel.
+///
+/// Sending a reply will consume this struct.
+///
+/// ### Panics:
+///
+/// The struct cannot be dropped before a reply is sent. The reply must be sent using
+/// [RequestWithReplyChannel::reply] or [RequestWithReplyChannel::reply_from_request]. If the
+/// struct is dropped without a reply sent, this thread will panic. In this case, the thread of the
+/// reply receiver will continue with a warning.
+/// However, the reply does not need to be sent immediately. This struct can be stored and
+/// forwarded, but it must be sent before the request is dropped.
+///
+/// The intention of the panic behavior is to make it easier to catch subtle programming
+/// errors early where a reply is not sent by mistake. The stacktrace will show the location
+/// where the request struct was dropped (before a reply was sent).
+///
+/// This behavior might change in the future.
 #[derive(Debug)]
 pub struct RequestWithReplyChannel<Request, Reply> {
     /// The request.
     pub request: Request,
-    /// The reply channel.
-    pub reply_channel: tokio::sync::oneshot::Sender<ReplyMessage<Reply>>,
+    pub(crate) reply_channel: Linear<tokio::sync::oneshot::Sender<ReplyMessage<Reply>>>,
 }
 
 /// A trait for request messages.
@@ -41,40 +59,22 @@ impl<
 }
 
 impl<Request, Reply: Debug> RequestWithReplyChannel<Request, Reply> {
-    /// Reply to the request immediately.
-    pub fn reply<F>(self, func: F)
+    /// Reply to the request using the provided function.
+    pub fn reply_from_request<F>(self, func: F)
     where
         F: FnOnce(Request) -> Reply,
     {
-        let reply_struct = self.reply_later();
-        let reply = func(reply_struct.request);
-        reply_struct
-            .reply_channel
-            .send(ReplyMessage { reply })
-            .unwrap();
+        let request = self.request;
+        let reply = func(request);
+
+        let reply_channel = self.reply_channel.into_inner();
+        reply_channel.send(ReplyMessage { reply }).unwrap();
     }
 
-    /// Reply to the request later using the provided reply channel.
-    pub fn reply_later(self) -> ReplyLater<Request, Reply> {
-        ReplyLater::<Request, Reply> {
-            request: self.request,
-            reply_channel: self.reply_channel,
-        }
-    }
-}
-
-/// A request with a reply channel.
-pub struct ReplyLater<Request, Reply> {
-    /// The request.
-    pub request: Request,
-    /// The reply channel.
-    pub reply_channel: tokio::sync::oneshot::Sender<ReplyMessage<Reply>>,
-}
-
-impl<Request, Reply: Debug> ReplyLater<Request, Reply> {
-    /// Send the reply to the request.
-    pub fn send_reply(self, reply: Reply) {
-        self.reply_channel.send(ReplyMessage { reply }).unwrap();
+    /// Reply to the request.
+    pub fn reply(self, reply: Reply) {
+        let reply_channel = self.reply_channel.into_inner();
+        reply_channel.send(ReplyMessage { reply }).unwrap();
     }
 }
 
@@ -85,7 +85,8 @@ pub struct ReplyMessage<Reply> {
     pub reply: Reply,
 }
 
-/// OutRequestChannel is a connections for messages which are sent to a downstream actor.
+/// OutRequestChannel is a connections for sending requests to other actors (and receiving replies
+/// later).
 pub struct OutRequestChannel<Request, Reply, M: IsInboundMessage> {
     /// Unique name of the request channel.
     pub name: String,
@@ -117,7 +118,7 @@ impl<
         M: IsInboundMessageNew<ReplyMessage<Reply>>,
     > OutRequestChannel<Request, Reply, M>
 {
-    /// Create a new request channel for actor in provided context.    
+    /// Creates a new out-request channel for the actor.
     pub fn new(
         name: String,
         actor_name: &str,
@@ -131,7 +132,7 @@ impl<
         }
     }
 
-    /// Connect the request channel from this actor to the inbound channel of another actor.
+    /// Connects the out-request channel from this actor to the in-request channel of another actor.
     pub fn connect<Me: IsInRequestMessageNew<RequestWithReplyChannel<Request, Reply>>>(
         &mut self,
         _ctx: &mut Hollywood,
@@ -144,12 +145,12 @@ impl<
         }));
     }
 
-    /// Send a message to the connected inbound channels of other actors.
+    /// Sends a request message to the connected in-request channel of other actors.
     pub fn send_request(&self, msg: Request) {
         let (reply_sender, reply_receiver) = tokio::sync::oneshot::channel();
         let msg = RequestWithReplyChannel {
             request: msg,
-            reply_channel: reply_sender,
+            reply_channel: Linear::new(reply_sender),
         };
         self.connection_register.send(msg);
 
@@ -157,18 +158,17 @@ impl<
         let name = self.name.clone();
 
         tokio::spawn(async move {
-            let r = match reply_receiver.await {
-                Ok(r) => r,
+            match reply_receiver.await {
+                Ok(r) => match sender.send(M::new(name, r)) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!("Error sending request: {:?}", e);
+                    }
+                },
                 Err(e) => {
-                    panic!("Error: {:?}", e);
+                    warn!("Reply receiver error: {:?}", e);
                 }
             };
-            match sender.send(M::new(name, r)) {
-                Ok(_) => {}
-                Err(e) => {
-                    panic!("Error: {:?}", e);
-                }
-            }
         });
     }
 }

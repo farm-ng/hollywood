@@ -11,7 +11,7 @@ keywords = ["actor", "compute", "graph", "pipeline"]
 license = "Apache-2.0"
 readme = "../README.md"
 repository = "https://github.com/farm-ng/hollywood/tree/main/hollywood_macros"
-version = "0.6.0"
+version = "0.7.0"
 
 [lib]
 proc-macro = true

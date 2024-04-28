@@ -1,9 +1,6 @@
 use crate::prelude::*;
-use std::cmp::Reverse;
-use std::fmt::Debug;
-use std::fmt::Display;
 
-/// Type of the Xth inbound channel for the zip actor.
+/// Type of the Nth inbound channel for the zip actor.
 #[derive(Clone, Debug, Default)]
 pub struct ZipPair<const N: usize, Key: PartialEq + Eq + PartialOrd + Ord, Value> {
     /// Key to associate message from different inbound channels with.

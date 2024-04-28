@@ -1,10 +1,10 @@
-use super::connection::ConnectionEnum;
 use crate::prelude::*;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::SendError;
+use tracing::warn;
 
 /// IsOutboundHub is a collection of outbound channels for the actor.
 pub trait IsOutboundHub: Send + Sync + 'static + HasActivate {
@@ -153,8 +153,8 @@ impl<Out: Send + Sync, M: IsInboundMessageNew<Out>> IsGenericConnection<Out>
         let handler = tokio::spawn(async move {
             match c.send(msg) {
                 Ok(_) => {}
-                Err(SendError(_)) => {
-                    println!("SendError");
+                Err(SendError(e)) => {
+                    warn!("Send message error: {:?}", e);
                 }
             }
         });
@@ -171,8 +171,8 @@ impl<Out: Send + Sync, InT, M: IsInboundMessageNew<InT>> IsGenericConnection<Out
         let handler = tokio::spawn(async move {
             match c.send(msg) {
                 Ok(_) => {}
-                Err(SendError(_)) => {
-                    println!("SendError");
+                Err(SendError(e)) => {
+                    warn!("Send message error: {:?}", e);
                 }
             }
         });

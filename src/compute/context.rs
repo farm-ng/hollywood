@@ -1,10 +1,9 @@
+use std::marker::PhantomData;
+use std::sync::Arc;
+
 use crate::compute::topology::Topology;
 use crate::core::outbound::OutboundConnection;
 use crate::prelude::*;
-use crate::CancelRequest;
-use crate::Pipeline;
-use std::marker::PhantomData;
-use std::sync::Arc;
 
 /// The context of the compute graph which is used to configure the network topology.
 ///
@@ -17,36 +16,55 @@ pub struct Hollywood {
 }
 
 impl Hollywood {
-    /// Create a new context.
+    /// Create a new Hollywood context.
     ///
     /// This is the main entry point to configure the compute graph. The network topology is defined
     /// by the user within the callback function.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// # use hollywood::actors::printer::PrinterProp;
+    /// # use hollywood::actors::Nudge;
+    /// # use hollywood::actors::Printer;
+    /// # use hollywood::prelude::*;
+    /// let pipeline = Hollywood::configure(&mut |context| {
+    ///     let mut nudge = Nudge::<String>::new(context, "nudge".to_owned());
+    ///     let mut nudge_printer = Printer::<String>::from_prop_and_state(
+    ///         context,
+    ///         PrinterProp {
+    ///             topic: "nudge: ".to_string(),
+    ///         },
+    ///         NullState::default(),
+    ///     );
+    ///     nudge
+    ///         .outbound
+    ///         .nudge
+    ///         .connect(context, &mut nudge_printer.inbound.printable);
+    /// });
+    /// ```
     pub fn configure(callback: &mut dyn FnMut(&mut Hollywood)) -> Pipeline {
         let mut context = Hollywood::new();
         callback(&mut context);
         Pipeline::from_context(context)
     }
 
-    /// Registers an outbound channel for cancel request.
-    ///
-    /// Upon receiving a cancel request the registered outbound channel, the execution of the
-    /// pipeline will be stopped.
+    /// Returns a sender to send cancel requests to the pipeline.
     pub fn get_cancel_request_sender(
         &mut self,
     ) -> tokio::sync::mpsc::UnboundedSender<CancelRequest> {
         self.cancel_request_sender_template.clone()
     }
 
-    /// Registers an outbound channel for cancel request.
+    /// Registers an outbound channel to receive cancel requests from.
     ///
-    /// Upon receiving a cancel request the registered outbound channel, the execution of the
-    /// pipeline will be stopped.
-    pub fn register_cancel_requester(&mut self, outbound: &mut OutboundChannel<()>) {
+    /// Upon receiving a cancel request, the execution of the pipeline will be stopped.
+    pub fn register_cancel_requester(&mut self, outbound: &mut OutboundChannel<CancelRequest>) {
         outbound
             .connection_register
             .push(Arc::new(OutboundConnection {
                 sender: self.cancel_request_sender_template.clone(),
-                inbound_channel: "CANCEL".to_string(),
+                inbound_channel: CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL.to_owned(),
                 phantom: PhantomData {},
             }));
     }

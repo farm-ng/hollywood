@@ -7,11 +7,11 @@ use drawille::Canvas;
 
 /// Inbound channels for the draw actor
 #[derive(Clone, Debug)]
-#[actor_inputs(DrawInbound, 
+#[actor_inputs(DrawInbound,
     {
-        NullProp, 
-        DrawState, 
-        NullOutbound, 
+        NullProp,
+        DrawState,
+        NullOutbound,
         NullOutRequests,
         NullInRequestMessage
     })]

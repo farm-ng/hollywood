@@ -1,8 +1,4 @@
-use crate::core::actor::ForwardRequestTable;
-use crate::core::runner::Runner;
 use crate::prelude::*;
-use crate::ForwardTable;
-use crate::GenericActor;
 
 /// Creates actor from its components.
 ///
@@ -70,13 +66,14 @@ impl<
     pub(crate) fn build<
         Inbound: IsInboundHub<Prop, State, Outbound, OutRequest, M, R>,
         InRequest: IsInRequestHub<Prop, State, Outbound, OutRequest, M, R>,
-        Run: Runner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>,
+        Run: IsRunner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>,
     >(
         self,
         inbound: Inbound,
         in_requests: InRequest,
         outbound: Outbound,
         out_requests: OutRequest,
+        on_exit_fn: Option<Box<dyn FnOnce() + Send + Sync + 'static>>,
     ) -> GenericActor<Prop, Inbound, InRequest, State, Outbound, OutRequest, Run> {
         let mut actor = GenericActor {
             actor_name: self.actor_name.clone(),
@@ -96,6 +93,7 @@ impl<
                 self.request_receiver,
                 actor.out_requests.extract(),
             ),
+            on_exit_fn,
         ));
         actor
     }

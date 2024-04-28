@@ -1,7 +1,4 @@
-use crate::core::runner::Runner;
 use crate::prelude::*;
-use crate::ConnectionEnum;
-use crate::GenericActor;
 use async_trait::async_trait;
 use std::fmt::Debug;
 
@@ -61,7 +58,7 @@ pub struct NudgeOutbound<Item: 'static + Default + Clone + Send + Sync + std::fm
 pub struct NudgeRunner {}
 
 impl<Item: Default + Sync + Send + Clone + Debug + 'static>
-    Runner<
+    IsRunner<
         NudgeProp<Item>,
         NullInbound,
         NullInRequests,
@@ -111,6 +108,7 @@ impl<Item: Default + Sync + Send + Clone + Debug + 'static>
             tokio::sync::mpsc::UnboundedReceiver<NullInRequestMessage>,
             NullOutRequests,
         ),
+        _on_exit_fn: Option<Box<dyn FnOnce() + Send + Sync + 'static>>,
     ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(NudgeActor::<Item> {
             name: name.clone(),
@@ -150,10 +148,13 @@ impl<Item: 'static + Default + Clone + Send + Sync + std::fmt::Debug> IsActorNod
             }
             ConnectionEnum::Active(active) => {
                 for i in active.maybe_registers.as_ref().unwrap().iter() {
-                    println!("NudgeActor: sending");
                     i.send_impl(self.prop.item.clone());
                 }
             }
         }
+    }
+
+    fn on_exit(&mut self) {
+        // Do nothing
     }
 }

@@ -1,10 +1,12 @@
-use std::time::Duration;
-
+use eframe::egui;
 use hollywood::actors::egui::EguiActor;
 use hollywood::actors::egui::EguiAppFromBuilder;
 use hollywood::actors::egui::GenericEguiBuilder;
 use hollywood::actors::egui::Stream;
 use hollywood::prelude::*;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
 
 #[derive(Clone, Debug)]
 #[actor_inputs(
@@ -39,7 +41,7 @@ impl IsInRequestMessage for ContentGeneratorInRequestMessage {
 }
 
 impl HasOnRequestMessage for ContentGeneratorInRequestMessage {
-    fn on_message(
+    fn on_request(
         self,
         _prop: &Self::Prop,
         state: &mut Self::State,
@@ -49,7 +51,7 @@ impl HasOnRequestMessage for ContentGeneratorInRequestMessage {
         match self {
             ContentGeneratorInRequestMessage::Reset(msg) => {
                 state.offset = -state.last_x;
-                msg.reply(|_| state.last_x);
+                msg.reply(state.last_x);
             }
         }
     }
@@ -204,7 +206,8 @@ pub struct EguiAppExample {
         tokio::sync::mpsc::UnboundedReceiver<RequestWithReplyChannel<String, String>>,
     pub out_reply_recv: tokio::sync::mpsc::UnboundedReceiver<ReplyMessage<f64>>,
     pub out_request_sender: tokio::sync::mpsc::UnboundedSender<()>,
-    pub cancel_request_sender: tokio::sync::mpsc::UnboundedSender<hollywood::CancelRequest>,
+    pub cancel_request_sender: tokio::sync::mpsc::UnboundedSender<CancelRequest>,
+    pub on_exit_recv: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<()>>>,
 
     pub x: f64,
     pub sin_value: f64,
@@ -219,6 +222,7 @@ impl EguiAppFromBuilder<EguiAppExampleBuilder> for EguiAppExample {
             in_request_recv: builder.in_request_from_actor_recv,
             out_request_sender: builder.out_request_to_actor_sender,
             cancel_request_sender: builder.cancel_request_sender.unwrap(),
+            on_exit_recv: builder.on_exit_recv,
             x: 0.0,
             sin_value: 0.0,
             cos_value: 0.0,
@@ -229,12 +233,14 @@ impl EguiAppFromBuilder<EguiAppExampleBuilder> for EguiAppExample {
 
     type State = String;
 }
-use eframe::egui;
-use hollywood::OutRequestChannel;
-use hollywood::ReplyMessage;
-use hollywood::RequestWithReplyChannel;
+
 impl eframe::App for EguiAppExample {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Close the window if the on exit signal from the pipeline is received
+        if self.on_exit_recv.lock().unwrap().try_recv().is_ok() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        // Handle incoming messages
         while let Ok(value) = self.message_recv.try_recv() {
             match value.msg {
                 PlotMessage::SinPlot((x, y)) => {
@@ -247,13 +253,13 @@ impl eframe::App for EguiAppExample {
                 }
             }
         }
+        // Handle incoming requests
+        while let Ok(value) = self.in_request_recv.try_recv() {
+            value.reply("reply".to_owned());
+        }
+        // Process replies (to reset request) from the content generator
         while let Ok(value) = self.out_reply_recv.try_recv() {
             println!("Reply: {:?}", value);
-        }
-        while let Ok(value) = self.in_request_recv.try_recv() {
-            //println!("Request: {:?}", value);
-
-            value.reply(|_| "reply".to_owned());
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -263,6 +269,7 @@ impl eframe::App for EguiAppExample {
             ui.label(format!("cos(y): {}", self.cos_value));
 
             if ui.button("Reset").clicked() {
+                // send a reset request to the content generator
                 self.out_request_sender.send(()).unwrap();
             }
         });
@@ -271,9 +278,7 @@ impl eframe::App for EguiAppExample {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.cancel_request_sender
-            .send(hollywood::CancelRequest::Cancel(()))
-            .unwrap();
+        self.cancel_request_sender.send(CancelRequest).unwrap();
     }
 }
 
@@ -344,7 +349,6 @@ pub fn run_egui_app_on_man_thread<
 >(
     builder: Builder,
 ) {
-    env_logger::init();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 480.0]),
         renderer: eframe::Renderer::Wgpu,
@@ -363,6 +367,8 @@ pub fn run_egui_app_on_man_thread<
 }
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

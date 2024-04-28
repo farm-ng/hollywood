@@ -19,7 +19,6 @@ use syn::Token;
 use syn::Type;
 use syn::TypePath;
 
-/// Documentation is in the hollywood crate.
 pub(crate) fn actor_outputs_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let ast = match parse2::<ItemStruct>(item) {
         Ok(ast) => ast,
@@ -37,7 +36,6 @@ pub(crate) fn actor_outputs_impl(_attr: TokenStream, item: TokenStream) -> Token
     let output_assignments = fields.iter().map(|field| {
         let field_name = &field.ident;
         if let Some(inner_ty) = is_output_type(&field.ty) {
-            // if the field type is OutboundChannel<T>, use OutboundChannel::<T>
             quote! {
                 #field_name: OutboundChannel::<#inner_ty>::new(
                     context,
@@ -86,7 +84,6 @@ pub(crate) fn actor_outputs_impl(_attr: TokenStream, item: TokenStream) -> Token
                 #(#output_act)*
             }
         }
-
         #ast
     };
 
@@ -113,8 +110,7 @@ fn is_output_type(ty: &Type) -> Option<&Type> {
     None
 }
 
-/// Documentation is in the hollywood crate.
-pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub(crate) fn actor_out_requests_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let ast = match parse2::<ItemStruct>(item) {
         Ok(ast) => ast,
         Err(err) => return err.to_compile_error(),
@@ -158,7 +154,7 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
     let field0 = fields
         .first()
         .expect("Request struct must have at least one field");
-    let m_type = is_request_type(&field0.ty).unwrap()[2];
+    let m_type = is_out_request_type(&field0.ty).unwrap()[2];
 
     let gen = quote! {
         impl #impl_generics IsOutRequestHub<#m_type> for #struct_name #ty_generics #where_clause {
@@ -190,7 +186,7 @@ pub(crate) fn actor_requests_impl(_attr: TokenStream, item: TokenStream) -> Toke
 }
 
 // This function checks if the field's type is OutRequestChannel<Request, Reply, M>
-fn is_request_type(ty: &Type) -> Option<[&Type; 3]> {
+fn is_out_request_type(ty: &Type) -> Option<[&Type; 3]> {
     if let Type::Path(TypePath {
         path: Path { segments, .. },
         ..
@@ -214,7 +210,6 @@ fn is_request_type(ty: &Type) -> Option<[&Type; 3]> {
     None
 }
 
-/// Documentation is in the hollywood crate.
 pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream {
     let ActorInbound {
         struct_name,
@@ -277,28 +272,12 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
             generics.params.len()
         );
 
-        let generic_ident =
-            if let Some(syn::GenericParam::Type(type_param)) = generics.params.first() {
-                // Extracts just the identifier of the type parameter (e.g., `T`)
-                Some(&type_param.ident)
-            } else {
-                None
-            };
-
-        let instantiation = if let Some(ident) = generic_ident {
-            // Use the extracted identifier directly
-            quote! { #name::#variant_name(#ident::default()) }
-        } else {
-            // When there are no generics
-            quote! { #name::#variant_name(Default::default()) }
-        };
-
         quote! {
             let #snake_case_variant_name = InboundChannel::new(
                 &mut builder.context,
                 actor_name.clone(),
                 &builder.sender,
-                #instantiation.inbound_channel(),
+                stringify!(#variant_name).to_owned(),
             );
             builder.forward.insert(
                 #snake_case_variant_name.name.clone(),
@@ -364,7 +343,6 @@ pub fn actor_inputs_impl(args: TokenStream, inbound: TokenStream) -> TokenStream
                 }
             }
         }
-
     };
 
     gen.into()
@@ -406,6 +384,187 @@ impl Parse for ActorInbound {
     }
 }
 
+pub fn actor_in_requests_impl(args: TokenStream, inbound: TokenStream) -> TokenStream {
+    let ActorInRequests {
+        struct_name,
+        prop_type,
+        state_type,
+        output_type,
+        request_type,
+        message_type,
+    } = match parse2::<ActorInRequests>(args) {
+        Ok(args) => args,
+        Err(err) => return err.to_compile_error(),
+    };
+    let ast = match parse2::<ItemEnum>(inbound) {
+        Ok(ast) => ast,
+        Err(err) => return err.to_compile_error(),
+    };
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let fields = &ast.variants;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let in_requests = fields.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let snake_case_variant_name_str = variant_name.to_string().to_case(Case::Snake);
+        let snake_case_variant_name = Ident::new(&snake_case_variant_name_str, variant_name.span());
+        let field_type = if let Fields::Unnamed(fields_unnamed) = &variant.fields {
+            &fields_unnamed.unnamed[0].ty
+        } else {
+            panic!("Enum variants must be tuples");
+        };
+
+        let msg = format!(
+            "`{}` channel field - autogenerated by the [actor_inputs] macro.",
+            variant_name
+        );
+        quote! {
+            #[doc = #msg]
+            pub #snake_case_variant_name: InRequestChannel<#field_type, #name #ty_generics>
+        }
+    });
+
+    let match_arm = fields.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        quote! {
+            #name::#variant_name(_) => {
+                stringify!(#variant_name).to_string()
+            }
+        }
+    });
+
+    let from_builder_inbounds = fields.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let snake_case_variant_name_str = variant_name.to_string().to_case(Case::Snake);
+        let snake_case_variant_name = Ident::new(&snake_case_variant_name_str, variant_name.span());
+
+        assert!(
+            generics.params.len() <= 1,
+            "Only zero or one generic parameter is supported, got {}",
+            generics.params.len()
+        );
+
+        let field_type = if let Fields::Unnamed(fields_unnamed) = &variant.fields {
+            &fields_unnamed.unnamed[0].ty
+        } else {
+            panic!("Enum variants must be tuples");
+        };
+
+        quote! {
+
+            let #snake_case_variant_name = InRequestChannel::<#field_type, #name>::new(
+                &mut builder.context,
+                actor_name.clone(),
+                &builder.request_sender,
+                stringify!(#variant_name).to_owned(),
+            );
+            builder.forward_request.insert(
+                #snake_case_variant_name.name.clone(),
+                Box::new(#snake_case_variant_name.clone())
+            );
+        }
+    });
+
+    let from_builder_init = fields.iter().map(|variant| {
+        let variant_name = &variant.ident;
+        let snake_case_variant_name_str = variant_name.to_string().to_case(Case::Snake);
+        let snake_case_variant_name = Ident::new(&snake_case_variant_name_str, variant_name.span());
+
+        quote! {
+            #snake_case_variant_name,
+        }
+    });
+
+    let gen = quote! {
+        #ast
+
+        /// Auto-generated inbound hub for actor.
+        pub struct #struct_name #impl_generics #where_clause {
+            #(#in_requests),*
+        }
+
+        impl #impl_generics IsInRequestMessage for #name #ty_generics #where_clause {
+            type Prop = #prop_type;
+            type State = #state_type;
+            type OutboundHub = #output_type;
+            type OutRequestHub = #request_type;
+
+            fn in_request_channel(&self) -> String {
+                match self {
+                   #(#match_arm),*
+                }
+            }
+        }
+
+        impl #impl_generics IsInRequestHub<
+            #prop_type,
+            #state_type,
+            #output_type,
+            #request_type,
+            #message_type,
+            #name #ty_generics> for #struct_name #ty_generics #where_clause
+        {
+            fn from_builder(
+                builder: &mut ActorBuilder<
+                    #prop_type,
+                    #state_type,
+                    #output_type,
+                    #request_type,
+                    #message_type,
+                    #name #ty_generics,
+                >,
+                actor_name: &str) -> Self
+            {
+                #(#from_builder_inbounds)*
+
+                #struct_name {
+                    #(#from_builder_init)*
+                }
+            }
+        }
+    };
+
+    gen.into()
+}
+
+struct ActorInRequests {
+    struct_name: Ident,
+    prop_type: Type,
+    state_type: Type,
+    output_type: Type,
+    request_type: Type,
+    message_type: Type,
+}
+
+impl Parse for ActorInRequests {
+    fn parse(inbound: ParseStream) -> Result<Self> {
+        let struct_name: Ident = inbound.parse()?;
+        let _: Generics = inbound.parse()?;
+        let _: Token![,] = inbound.parse()?;
+        let content;
+        syn::braced!(content in inbound);
+        let prop_type: Type = content.parse()?;
+        let _: Token![,] = content.parse()?;
+        let state_type: Type = content.parse()?;
+        let _: Token![,] = content.parse()?;
+        let output_type: Type = content.parse()?;
+        let _: Token![,] = content.parse()?;
+        let request_type: Type = content.parse()?;
+        let _: Token![,] = content.parse()?;
+        let message_type: Type = content.parse()?;
+        Ok(ActorInRequests {
+            struct_name,
+            prop_type,
+            state_type,
+            output_type,
+            request_type,
+            message_type,
+        })
+    }
+}
+
 struct ActorArgs {
     request_message_type: Type,
     message_type: Type,
@@ -424,7 +583,6 @@ impl Parse for ActorArgs {
     }
 }
 
-/// Documentation is in the hollywood crate.
 pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse inbound
     let ActorArgs {
@@ -450,7 +608,6 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut attrs = Vec::new();
     if let Item::Type(item_type) = &mut inbound_clone {
         attrs.append(&mut item_type.attrs);
-        // ...
     }
 
     let mut maybe_prop = None;
@@ -473,8 +630,9 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
                         return Error::new_spanned(
                             &angle_bracketed_args,
                             concat!(
-                                "Expected 6 type arguments:",
-                                "Actor<PROP, INBOUNDS, INBOUND_REQUESTS, STATE, OUTBOUNDS, OUTBOUND_REQUESTS>"
+                                "Expected 6 type arguments: ",
+                                "Actor<PROP, INBOUND, INBOUND_REQUESTS, STATE,",
+                                "OUTBOUND, OUTBOUND_REQUESTS>"
                             ),
                         )
                         .to_compile_error()
@@ -501,27 +659,26 @@ pub fn actor_impl(attr: TokenStream, item: TokenStream) -> TokenStream {
     let inbound = maybe_inbounds.unwrap();
     let in_request = maybe_in_request.unwrap();
     let state_type = maybe_state.unwrap();
-    let out = maybe_outputs.unwrap();
+    let outbound = maybe_outputs.unwrap();
     let out_requests = maybe_requests.unwrap();
 
-    let runner_type = quote! { DefaultRunner<#prop, #inbound,
-    #in_request,
-    #state_type,  #out, #out_requests> };
+    let runner_type = quote! {
+        DefaultRunner<#prop, #inbound, #in_request, #state_type,  #outbound, #out_requests>
+    };
 
     let gen = quote! {
 
-        ///
+        #[allow(missing_docs)]
         #( #attrs )*
-        pub type #actor_name = Actor<#prop, #inbound,
-        #in_request,
-         #state_type, #out, #out_requests>;
+        pub type #actor_name =
+            Actor<#prop, #inbound, #in_request, #state_type, #outbound, #out_requests>;
 
         impl HasFromPropState<
                 #prop,
                 #inbound,
                 #in_request,
                 #state_type,
-                #out,
+                #outbound,
                 #message_type,
                 #request_message_type,
                 #out_requests,

@@ -11,25 +11,30 @@ keywords = ["actor", "compute", "graph", "pipeline"]
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/farm-ng/hollywood/"
-version = "0.6.0"
+version = "0.7.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = "0.1"
+ctrlc = "3.4"
 drawille = "0.3"
 # hollywood intends to use only basic features of egui, hence 
 # future versions of egui will likely/hopefully work
 eframe = {version = ">= 0.27, <1.0", features = ["wgpu"], optional = true}
+#version = ">= 0.27, <1.0", 
 env_logger = {version = "0.11", optional = true}
 grid = "0.13"
-hollywood_macros = {version = "0.6.0", path = "hollywood_macros"}
+hollywood_macros = {version = "0.7.0", path = "hollywood_macros"}
+linear_type = {version = "0.4"}
 # hollywood intends to use only very basic features of nalgebra, hence 
 # future versions of nalgebra before the major < 1.0 release are likely to work
 nalgebra = ">= 0.32, <1.0"
 petgraph = "0.6"
 rand = "0.8"
 rand_distr = "0.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
 # executor feature needed
 tokio = {version = "1.28", features = ["full"]}
 tokio-stream = "0.1"

@@ -1,10 +1,8 @@
 use crate::core::actor::ActorNodeImpl;
-use crate::core::actor::ForwardRequestTable;
 use crate::prelude::*;
-use crate::ForwardTable;
 
 /// Runner executes the pipeline.
-pub trait Runner<
+pub trait IsRunner<
     Prop,
     Inbound: IsInboundHub<Prop, State, Outbound, OutRequest, M, R>,
     InRequest,
@@ -30,6 +28,7 @@ pub trait Runner<
             tokio::sync::mpsc::UnboundedReceiver<R>,
             OutRequest,
         ),
+        on_exit_fn: Option<Box<dyn FnOnce() + Send + Sync + 'static>>,
     ) -> Box<dyn IsActorNode + Send + Sync>;
 }
 
@@ -85,7 +84,7 @@ impl<
         R: IsInRequestMessage,
         M: IsInboundMessage,
         OutRequest: IsOutRequestHub<M>,
-    > Runner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>
+    > IsRunner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>
     for DefaultRunner<Prop, Inbound, InRequest, State, Outbound, OutRequest>
 {
     fn new_actor_node(
@@ -102,6 +101,7 @@ impl<
             tokio::sync::mpsc::UnboundedReceiver<R>,
             OutRequest,
         ),
+        on_exit_fn: Option<Box<dyn FnOnce() + Send + Sync + 'static>>,
     ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(ActorNodeImpl::<Prop, State, Outbound, OutRequest, M, R> {
             name,
@@ -113,6 +113,7 @@ impl<
             forward_request: forward_receiver_request.0,
             request_receiver: Some(forward_receiver_request.1),
             out_request: forward_receiver_request.2,
+            on_exit_fn,
         })
     }
 }

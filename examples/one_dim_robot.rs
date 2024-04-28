@@ -111,6 +111,8 @@ async fn run_robot_example() {
 }
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

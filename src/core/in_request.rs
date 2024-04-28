@@ -5,7 +5,7 @@ use std::sync::Arc;
 pub trait IsInRequestHub<
     Prop,
     State,
-    IsOutboundHub,
+    OutboundHub,
     Request: IsOutRequestHub<M>,
     M: IsInboundMessage,
     R: IsInRequestMessage,
@@ -13,7 +13,7 @@ pub trait IsInRequestHub<
 {
     /// Create a new inbound hub for an actor.
     fn from_builder(
-        builder: &mut ActorBuilder<Prop, State, IsOutboundHub, Request, M, R>,
+        builder: &mut ActorBuilder<Prop, State, OutboundHub, Request, M, R>,
         actor_name: &str,
     ) -> Self;
 }
@@ -25,18 +25,18 @@ pub struct NullInRequests {}
 impl<
         Prop,
         State,
-        IsOutboundHub,
+        OutboundHub,
         NullInRequestMessage: IsInRequestMessage,
         NullMessage: IsInboundMessage,
         Request: IsOutRequestHub<NullMessage>,
-    > IsInRequestHub<Prop, State, IsOutboundHub, Request, NullMessage, NullInRequestMessage>
+    > IsInRequestHub<Prop, State, OutboundHub, Request, NullMessage, NullInRequestMessage>
     for NullInRequests
 {
     fn from_builder(
         _builder: &mut ActorBuilder<
             Prop,
             State,
-            IsOutboundHub,
+            OutboundHub,
             Request,
             NullMessage,
             NullInRequestMessage,
@@ -52,9 +52,9 @@ impl<
 /// InRequest channels can be connected to one or more outbound channels of upstream actors.
 #[derive(Debug)]
 pub struct InRequestChannel<T, M: IsInRequestMessage> {
-    /// Unique identifier of the inbound channel.
+    /// Unique identifier of the in-request channel.
     pub name: String,
-    /// Name of the actor that the inbound messages are for.
+    /// Name of the actor that the requests are sent to.
     pub actor_name: String,
     pub(crate) sender: Arc<tokio::sync::mpsc::UnboundedSender<M>>,
     pub(crate) phantom: std::marker::PhantomData<T>,
@@ -99,20 +99,20 @@ pub trait IsInRequestMessage: Send + Sync + 'static {
     /// State type of the receiving actor.
     type State;
 
-    /// IsOutboundHub type of the receiving actor, to produce outbound messages downstream.
+    /// OutboundHub type of the receiving actor, to produce outbound messages downstream.
     type OutboundHub: Send + Sync + 'static;
 
-    /// IsRequestHub type of the receiving actor, to send requests upstream.
+    /// OutRequestHub type of the receiving actor.
     type OutRequestHub: Send + Sync + 'static;
 
-    /// Name of the inbound channel that this message is for.
+    /// Name of the in-request channel that this message is for.
     fn in_request_channel(&self) -> String;
 }
 
-/// Customization point for processing inbound messages.
+/// Customization point for processing inbound request messages.
 pub trait HasOnRequestMessage: IsInRequestMessage {
-    /// Process the inbound message - user code with main business logic goes here.
-    fn on_message(
+    /// Process the inbound request message.
+    fn on_request(
         self,
         prop: &Self::Prop,
         state: &mut Self::State,
@@ -130,15 +130,14 @@ pub trait IsInRequestMessageNew<T>:
 }
 
 /// Message forwarder.
-pub trait HasForwardRequestMessage<Prop, State, IsOutboundHub, IsRequestHub, M: IsInRequestMessage>
-{
+pub trait HasForwardRequestMessage<Prop, State, OutboundHub, OutRequestHub, M: IsInRequestMessage> {
     /// Forward the message to the HasOnMessage customization point.
     fn forward_message(
         &self,
         prop: &Prop,
         state: &mut State,
-        outbound: &IsOutboundHub,
-        request: &IsRequestHub,
+        outbound: &OutboundHub,
+        request: &OutRequestHub,
         msg: M,
     );
 }
@@ -166,7 +165,7 @@ impl<
         request: &OutRequestHub,
         msg: M,
     ) {
-        msg.on_message(prop, state, outbound, request);
+        msg.on_request(prop, state, outbound, request);
     }
 }
 
@@ -189,7 +188,7 @@ impl IsInRequestMessage for NullInRequestMessage {
 }
 
 impl HasOnRequestMessage for NullInRequestMessage {
-    fn on_message(
+    fn on_request(
         self,
         _prop: &Self::Prop,
         _state: &mut Self::State,

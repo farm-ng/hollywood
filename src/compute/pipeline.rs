@@ -1,18 +1,14 @@
 use crate::compute::topology::Topology;
 use crate::prelude::*;
 use std::mem::swap;
+use tracing::{info, warn};
 
-/// Message to request stop execution of the compute pipeline.
-#[derive(Debug, Clone)]
-pub enum CancelRequest {
-    /// Request to cancel the execution of the compute pipeline.
-    Cancel(()),
-}
+/// A message to cancel the pipeline.
+#[derive(Clone, Debug)]
+pub struct CancelRequest;
 
 impl CancelRequest {
-    /// Unique name for cancel request inbound channel. This special inbound channel is not
-    /// associated with any actor but with the pipeline itself.
-    pub const CANCEL_REQUEST_INBOUND_CHANNEL: &'static str = "CANCEL";
+    pub(crate) const CANCEL_REQUEST_INBOUND_CHANNEL: &'static str = "CANCEL";
 }
 
 impl IsInboundMessage for CancelRequest {
@@ -21,16 +17,14 @@ impl IsInboundMessage for CancelRequest {
     type OutboundHub = NullOutbound;
     type OutRequestHub = NullOutbound;
 
-    /// This messages is only meant to use for the cancel request inbound channel of the pipeline.
-    /// Hence, the inbound name is the constant [CancelRequest::CANCEL_REQUEST_INBOUND_CHANNEL].
     fn inbound_channel(&self) -> String {
         Self::CANCEL_REQUEST_INBOUND_CHANNEL.to_owned()
     }
 }
 
-impl IsInboundMessageNew<()> for CancelRequest {
-    fn new(_inbound_name: String, _: ()) -> Self {
-        CancelRequest::Cancel(())
+impl IsInboundMessageNew<CancelRequest> for CancelRequest {
+    fn new(_inbound_name: String, _: CancelRequest) -> Self {
+        CancelRequest
     }
 }
 
@@ -60,6 +54,14 @@ impl Pipeline {
         compute_graph
     }
 
+    /// Returns a sender to send cancel requests to the pipeline.
+    pub fn get_cancel_request_sender(&self) -> tokio::sync::mpsc::UnboundedSender<CancelRequest> {
+        self.cancel_request_sender_template
+            .as_ref()
+            .unwrap()
+            .clone()
+    }
+
     /// Executes the compute graph.
     ///
     /// It consumes the self, starts  execution of the pipeline and returns a future (since it is
@@ -78,7 +80,19 @@ impl Pipeline {
     ///    - Repeatable execution of the pipeline shall lead to comparable results.
     ///      
     pub async fn run(mut self) -> Self {
-        println!("START NEW RUN");
+        info!("Pipeline started ...");
+
+        // Set up Ctrl-C handler to cancel the pipeline
+        //
+        // TODO: Make this configurable, but keep it enabled by default.
+        let cancel_requester = self.get_cancel_request_sender();
+        ctrlc::set_handler(move || {
+            cancel_requester
+                .send(CancelRequest)
+                .expect("Error sending Ctrl-C triggered cancel request");
+        })
+        .expect("Error setting Ctrl-C handler");
+
         let (kill_sender, _) = tokio::sync::broadcast::channel(10);
 
         let mut handles = vec![];
@@ -90,16 +104,12 @@ impl Pipeline {
 
         let h_exit = tokio::spawn(async move {
             match cancel_request_receiver.recv().await {
-                Some(msg) => {
-                    println!("Cancel requested");
-                    match msg {
-                        CancelRequest::Cancel(_) => {
-                            let _ = exit_tx.send(cancel_request_receiver);
-                        }
-                    }
+                Some(_) => {
+                    info!("Pipeline cancellation requested");
+                    let _ = exit_tx.send(cancel_request_receiver);
                 }
                 None => {
-                    println!("Cancel request channel closed");
+                    warn!("Cancel request channel closed");
                 }
             }
         });
@@ -119,7 +129,7 @@ impl Pipeline {
         match h_exit.await {
             Ok(_) => {}
             Err(err) => {
-                println!("Error in cancel request handler: {}", err);
+                warn!("Error in cancel request handler: {}", err);
             }
         }
         kill_sender.send(()).unwrap();
@@ -144,7 +154,7 @@ impl Pipeline {
             }
         }
 
-        println!("END RUN");
+        info!("Pipeline execution finished");
         self
     }
 

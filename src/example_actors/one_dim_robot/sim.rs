@@ -2,8 +2,6 @@ use crate::example_actors::one_dim_robot::RangeMeasurementModel;
 use crate::example_actors::one_dim_robot::Robot;
 use crate::example_actors::one_dim_robot::Stamped;
 use crate::prelude::*;
-use crate::OutRequestChannel;
-use crate::ReplyMessage;
 use rand_distr::Distribution;
 use rand_distr::Normal;
 use std::fmt::Debug;
@@ -20,12 +18,12 @@ pub struct PingPong {
 /// Inbound channels for the simulation actor.
 #[derive(Clone, Debug)]
 #[actor_inputs(
-    SimInbound, 
+    SimInbound,
     {
-        NullProp, 
-        SimState, 
+        NullProp,
+        SimState,
         SimOutbound,
-        SimRequest,  
+        SimRequest,
         NullInRequestMessage
     })]
 pub enum SimInboundMessage {
@@ -52,7 +50,7 @@ impl HasOnMessage for SimInboundMessage {
             SimInboundMessage::TimeStamp(time) => {
                 state.process_time_stamp(time, outbound, request);
                 if time >= state.shutdown_time {
-                    outbound.cancel_request.send(());
+                    outbound.cancel_request.send(CancelRequest);
                 }
             }
             SimInboundMessage::PingPongReply(msg) => {
@@ -167,7 +165,7 @@ pub struct SimOutbound {
     /// Noisy velocity measurement of the robot.
     pub noisy_velocity: OutboundChannel<Stamped<f64>>,
     /// Compute pipeline cancel request.
-    pub cancel_request: OutboundChannel<()>,
+    pub cancel_request: OutboundChannel<CancelRequest>,
 }
 
 /// Request of the simulation actor.

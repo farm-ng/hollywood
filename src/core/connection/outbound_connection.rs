@@ -1,6 +1,5 @@
 use crate::core::connection::ConnectionRegister;
 use crate::prelude::*;
-use crate::ConnectionEnum;
 use std::sync::Arc;
 
 /// Connection configuration

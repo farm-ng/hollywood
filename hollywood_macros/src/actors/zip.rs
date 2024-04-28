@@ -1,12 +1,6 @@
 use proc_macro2::TokenStream;
-use quote::format_ident;
-use quote::quote;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
-use syn::parse2;
-use syn::LitInt;
-use syn::Result;
-
+use quote::{format_ident, quote};
+use syn::{parse::Parse, parse::ParseStream, parse2, LitInt, Result};
 struct ZipInput {
     num_fields: usize,
 }
@@ -28,53 +22,50 @@ pub(crate) fn tuple_n_impl(input: TokenStream) -> TokenStream {
 
     let tuple_struct = format_ident!("Tuple{}", num_fields);
 
-    let field_seq = (0..num_fields).map(|i| format_ident!("item{}", i));
-    let field_seq2 = field_seq.clone();
-    let field_seq3 = field_seq.clone();
-
-    let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
-    let type_seq2 = type_seq.clone();
-    let type_seq3 = type_seq.clone();
-    let type_with_bounds_seq = (0..num_fields).map(|i| {
-        let ident = format_ident!("Item{}", i);
-        quote! { #ident: Default + Clone + Debug + Sync + Send + 'static
-        + std::marker::Sync+ std::marker::Send}
-    });
+    // Collecting iterators into vectors to reuse them
+    let field_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("item{}", i))
+        .collect();
+    let type_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("Item{}", i))
+        .collect();
+    let type_with_bounds_seq: Vec<_> = type_seq
+        .iter()
+        .map(|ident| {
+            quote! {
+                #ident: Default + Clone + std::fmt::Debug + Sync + Send + 'static
+            }
+        })
+        .collect();
 
     let expanded = quote! {
-        #[derive(Default, Clone, Debug)]
-
-        /// A tuple struct X fields.
-        ///
-        /// Used to send merged items from X inbound channels to one outbound channel.
-        pub struct #tuple_struct<Key:Default+Clone+Debug, #( #type_seq ),*> {
-            /// Key to associate message from different inbound channels with.
+        #[derive(Default, Clone, std::fmt::Debug)]
+        /// A tuple struct with N fields.
+        /// Used to send merged items from N inbound channels to one outbound channel.
+        pub struct #tuple_struct<Key, #( #type_seq ),*>
+        where
+            Key: Default + Clone + std::fmt::Debug,
+        {
+            /// Key to associate messages from different inbound channels.
             pub key: Key,
             #(
                 /// The value to be zipped.
-                pub #field_seq: #type_seq3
+                pub #field_seq: #type_seq
             ),*
         }
-        impl<
-                Key: Default
-                    + Debug
-                    + Clone
-                    + Display
-                    + PartialEq
-                    + Eq
-                    + PartialOrd
-                    + Ord
-                    + Sync
-                    + Send
-                    + 'static,
-                    #( #type_with_bounds_seq ),*
-            > Display for #tuple_struct<Key, #( #type_seq2 ),*>
+
+        impl<Key, #( #type_seq ),*> std::fmt::Display for #tuple_struct<Key, #( #type_seq ),*>
+        where
+            Key: Default + Clone + std::fmt::Debug + std::fmt::Display + PartialEq + Eq
+                 + PartialOrd + Ord + Sync + Send + 'static,
+            #( #type_with_bounds_seq ),*
         {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(
                     f,
-                    concat!( "key: {}", #( stringify!(, #field_seq2), ": {:?}" ),* ),
-                    self.key,  #( self.#field_seq3), *)
+                    concat!("key: {}", #( ", " , stringify!(#field_seq), ": {:?}" ),*),
+                    self.key, #( &self.#field_seq ),*
+                )
             }
         }
     };
@@ -91,34 +82,36 @@ pub(crate) fn zip_outbound_n_impl(input: TokenStream) -> TokenStream {
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
     let tuple_struct = format_ident!("Tuple{}", num_fields);
 
-    let params_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
-    let params_seq2 = params_seq.clone();
-    let params_seq3 = params_seq.clone();
-    let params_seq4 = params_seq.clone();
-    let params_seq5 = params_seq.clone();
-
-    let params_with_bounds_seq: Vec<_> = (0..num_fields)
-        .map(|i| {
-            let ident = format_ident!("Item{}", i);
-            quote! { #ident: Default + Clone + Debug + Sync + Send
-            + 'static +std::marker::Sync+ std::marker::Send}
+    // Generate parameters and collect into a vector for reuse
+    let params_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("Item{}", i))
+        .collect();
+    let params_with_bounds_seq: Vec<_> = params_seq
+        .iter()
+        .map(|ident| {
+            quote! {
+                #ident: Default + Clone + std::fmt::Debug + Sync + Send + 'static
+            }
         })
         .collect();
-    let params_with_bounds_seq2 = params_with_bounds_seq.clone();
-    let params_with_bounds_seq3 = params_with_bounds_seq.clone();
 
     let expanded = quote! {
-        /// ZipX outbound hub
+        /// ZipN outbound hub
         ///
         /// Contains one outbound channel of the merged inbound channels.
-        pub struct #outbound_struct<Key:Default + Debug + Clone + Sync + Send
-                                + 'static , #( #params_with_bounds_seq ),*> {
+        pub struct #outbound_struct<
+            Key: Default + std::fmt::Debug + Clone + Sync + Send + 'static,
+            #( #params_with_bounds_seq ),*
+        > {
             /// Outbound channel of the merged inbound channels.
-            pub zipped: OutboundChannel<#tuple_struct<Key, #( #params_seq2 ),*>>,
+            pub zipped: OutboundChannel< #tuple_struct<Key, #( #params_seq ),*> >,
         }
 
-        impl<Key: Default +  Debug+Clone+Sync + Send + 'static, #( #params_with_bounds_seq2 ),*>
-            HasActivate for #outbound_struct<Key, #( #params_seq3 ),*>
+        impl<
+            Key: Default + std::fmt::Debug + Clone+Sync + Send + 'static,
+            #( #params_with_bounds_seq ),*
+        >
+            HasActivate for #outbound_struct<Key, #( #params_seq ),*>
         {
             fn extract(&mut self) -> Self {
                 Self {
@@ -131,12 +124,15 @@ pub(crate) fn zip_outbound_n_impl(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl<Key:  Default + Debug+Clone+Sync + Send + 'static, #( #params_with_bounds_seq3 ),*>
-            IsOutboundHub for #outbound_struct<Key, #( #params_seq4 ),*>
+        impl<
+            Key: Default + std::fmt::Debug + Clone + Sync + Send + 'static,
+            #( #params_with_bounds_seq ),*
+        >
+            IsOutboundHub for #outbound_struct<Key, #( #params_seq ),*>
         {
             fn from_context_and_parent(context: &mut Hollywood, actor_name: &str) -> Self {
                 Self {
-                    zipped: OutboundChannel::<#tuple_struct<Key, #( #params_seq5 ),*>>::new(
+                    zipped: OutboundChannel::<#tuple_struct<Key, #( #params_seq ),*>>::new(
                         context,
                         "zipped".to_owned(),
                         actor_name,
@@ -159,10 +155,10 @@ pub(crate) fn zip_state_n_impl(input: TokenStream) -> TokenStream {
 
     let heap_item_seq = (0..num_fields).map(|i| {
         let heap_item = format_ident!("item{}_heap", i);
-        let item = format_ident!("Item{}", i); // Corrected this line
+        let item = format_ident!("Item{}", i);
         let pair = quote! { ZipPair<#i, Key, #item> };
         quote! {
-            /// Heap for the Xth inbound channel.
+            /// Heap for the Nth inbound channel.
             pub #heap_item: std::collections::BinaryHeap<std::cmp::Reverse<#pair>>
         }
     });
@@ -170,11 +166,12 @@ pub(crate) fn zip_state_n_impl(input: TokenStream) -> TokenStream {
     let item_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
 
     let expanded = quote! {
-
-        /// State of the zip actor with X inbound channels.
-        #[derive(Clone, Debug, Default)]
-        pub struct #state_struct<Key: PartialEq + Eq + PartialOrd + Ord,
-                                #( #item_seq: Default + Clone + Debug + Sync + Send + 'static ),*>
+        /// State of the zip actor with N inbound channels.
+        #[derive(Clone, std::fmt::Debug, Default)]
+        pub struct #state_struct<
+            Key: PartialEq + Eq + PartialOrd + Ord,
+            #( #item_seq: Default + Clone + std::fmt::Debug + Sync + Send + 'static ),*
+        >
         {
             #( #heap_item_seq ),*
         }
@@ -193,20 +190,16 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
     let state_struct = format_ident!("Zip{}State", num_fields);
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
 
-    let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
-    let type_seq2 = type_seq.clone();
-    let type_seq3 = type_seq.clone();
-    let type_seq4 = type_seq.clone();
-    let type_seq5 = type_seq.clone();
-    let type_seq6 = type_seq.clone();
+    let type_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("Item{}", i))
+        .collect();
     let type_with_bounds_seq: Vec<_> = (0..num_fields)
         .map(|i| {
             let ident = format_ident!("Item{}", i);
-            quote! { #ident: Default + Clone + Debug + Sync + Send
+            quote! { #ident: Default + Clone + std::fmt::Debug + Sync + Send
             + 'static}
         })
         .collect();
-
     let i_seq: Vec<_> = (0..num_fields)
         .map(|i| {
             quote! { #i }
@@ -218,40 +211,31 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
         let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
 
         quote! {
-                   impl<
-                   Key: Default
-                       + Clone
-                       + Debug
-                       + PartialEq
-                       + Eq
-                       + PartialOrd
-                       + Ord
-                       + Debug
-                       + Clone
-                       + Sync
-                       + Send
-                       + 'static,
-                       #( #type_with_bounds_seq ),*
-                       > IsInboundMessageNew<ZipPair<#i, Key, #item>>
-                       for #inbound_message_enum<Key, #( #type_seq ),*>
-                   {
-                       fn new(_inbound_name: String, msg: ZipPair<#i, Key, #item>) -> Self {
-                           #inbound_message_enum::#item(msg)
-                       }
-                   }
+            impl<
+                Key: Default + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd
+                    + Ord + Sync + Send + 'static,
+                #( #type_with_bounds_seq ),*
+            >
+                IsInboundMessageNew<ZipPair<#i, Key, #item>>
+                for #inbound_message_enum<Key, #( #type_seq ),*>
+            {
+                fn new(_inbound_name: String, msg: ZipPair<#i, Key, #item>) -> Self {
+                    #inbound_message_enum::#item(msg)
+                }
+            }
         }
     });
 
     let expand = quote! {
 
         /// Inbound message for the zip actor.
-        #[derive(Clone,Debug)]
+        #[derive(Clone,std::fmt::Debug)]
         pub enum #inbound_message_enum<
-            Key: Ord + Clone + Debug + Sync + Send + 'static,
+            Key: Ord + Clone + std::fmt::Debug + Sync + Send + 'static,
             #( #type_with_bounds_seq ),*
         > {
             #(
-                /// Inbound message for the Xth inbound channel.
+                /// Inbound message for the Nth inbound channel.
                 #type_seq(ZipPair<#i_seq, Key, #type_seq>)
             ),*
         }
@@ -259,19 +243,20 @@ pub(crate) fn zip_inbound_message_n_impl(input: TokenStream) -> TokenStream {
        #(#msg_new_impl_seq)*
 
        impl<
-                Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord
+            Key: Default + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord
                 + Sync + Send + 'static,
-                #( #type_with_bounds_seq ),*
-            > IsInboundMessage for  #inbound_message_enum<Key, #(#type_seq2),*>
+            #( #type_with_bounds_seq ),*
+        >
+            IsInboundMessage for  #inbound_message_enum<Key, #(#type_seq),*>
         {
             type Prop = NullProp;
-            type State = #state_struct<Key, #(#type_seq3),*>;
-            type OutboundHub = #outbound_struct<Key, #(#type_seq4),*>;
+            type State = #state_struct<Key, #(#type_seq),*>;
+            type OutboundHub = #outbound_struct<Key, #(#type_seq),*>;
             type OutRequestHub = NullOutRequests;
 
             fn inbound_channel(&self) -> String {
                 match self {
-                    #( #inbound_message_enum::#type_seq5(_) =>  stringify!(#type_seq6).to_owned(), )*
+                    #( #inbound_message_enum::#type_seq(_) => stringify!(#type_seq).to_owned(), )*
                 }
             }
         }
@@ -292,62 +277,54 @@ pub(crate) fn zip_n_impl(input: TokenStream) -> TokenStream {
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
     let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
 
-    let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
-    let type_seq2 = type_seq.clone();
-    let type_seq3 = type_seq.clone();
-    let type_seq4 = type_seq.clone();
-    let type_seq5 = type_seq.clone();
-    let type_seq6 = type_seq.clone();
-    let type_seq7 = type_seq.clone();
-    let type_seq8 = type_seq.clone();
-    let type_seq9 = type_seq.clone();
-    let type_seq10 = type_seq.clone();
-    let type_seq11 = type_seq.clone();
-    let type_seq12 = type_seq.clone();
+    let type_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("Item{}", i))
+        .collect();
 
     let type_with_bounds_seq: Vec<_> = (0..num_fields)
         .map(|i| {
             let item_type = format_ident!("Item{}", i);
-            quote! { #item_type: Default + Clone + Debug + Sync + Send
+            quote! { #item_type: Default + Clone + std::fmt::Debug + Sync + Send
             + 'static}
         })
         .collect();
 
     let expanded = quote! {
 
-        /// ZipX actor, which zips X inbound channels into one outbound channel.
-        pub type #zip_struct<Key, #( #type_seq), *> = Actor<
+        /// ZipN actor, which zips N inbound channels into one outbound channel.
+        pub type #zip_struct<Key, #( #type_seq), *> =
+            Actor<
                 NullProp,
-                #inbound_struct<Key, #( #type_seq2), *>,
+                #inbound_struct<Key, #( #type_seq), *>,
                 NullInRequests,
-                #state_struct<Key, #( #type_seq3), *>,
-                #outbound_struct<Key, #( #type_seq4), *>,
+                #state_struct<Key, #( #type_seq), *>,
+                #outbound_struct<Key, #( #type_seq), *>,
                 NullOutRequests,
             >;
 
         impl<
-                Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord
-                     + Sync + Send + 'static,
-                #( #type_with_bounds_seq ),*
-            >
+            Key: Default + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord
+                + Sync + Send + 'static,
+            #( #type_with_bounds_seq ),*
+        >
             HasFromPropState<
                 NullProp,
-                #inbound_struct<Key, #( #type_seq5), *>,
+                #inbound_struct<Key, #( #type_seq ), *>,
                 NullInRequests,
-                #state_struct<Key, #( #type_seq6), *>,
-                #outbound_struct<Key, #( #type_seq7), *>,
-                #inbound_message_enum<Key, #( #type_seq8), *>,
+                #state_struct<Key, #( #type_seq ), *>,
+                #outbound_struct<Key, #( #type_seq ), *>,
+                #inbound_message_enum<Key, #( #type_seq ), *>,
                 NullInRequestMessage,
                 NullOutRequests,
                 DefaultRunner<
                     NullProp,
-                    #inbound_struct<Key, #( #type_seq9), *>,
+                    #inbound_struct<Key, #( #type_seq ), *>,
                     NullInRequests,
-                    #state_struct<Key, #( #type_seq10), *>,
-                    #outbound_struct<Key, #( #type_seq11), *>,
+                    #state_struct<Key, #( #type_seq ), *>,
+                    #outbound_struct<Key, #( #type_seq ), *>,
                     NullOutRequests,
                 >,
-            > for #zip_struct<Key, #( #type_seq12), *>
+            > for #zip_struct<Key, #( #type_seq ), *>
         {
             fn name_hint(_prop: &NullProp) -> String {
                 stringify!(#zip_struct).to_owned()
@@ -370,26 +347,18 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
     let outbound_struct = format_ident!("Zip{}Outbound", num_fields);
     let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
 
-    let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
-    let type_seq4 = type_seq.clone();
-    let type_seq5 = type_seq.clone();
-    let type_seq6 = type_seq.clone();
-    let type_seq7 = type_seq.clone();
-    let type_seq8 = type_seq.clone();
-    let type_seq9 = type_seq.clone();
-    let type_seq10 = type_seq.clone();
-    let type_seq12 = type_seq.clone();
+    let type_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("Item{}", i))
+        .collect();
 
-    let item_seq = (0..num_fields).map(|i| format_ident!("item{}", i));
-    let item_seq2 = item_seq.clone();
-    let item_seq3 = item_seq.clone();
-    let item_seq4 = item_seq.clone();
-    let item_seq5 = item_seq.clone();
+    let item_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("item{}", i))
+        .collect();
 
     let type_with_bounds_seq: Vec<_> = (0..num_fields)
         .map(|i| {
             let ident = format_ident!("Item{}", i);
-            quote! { #ident: Default + Clone + Debug + Sync + Send
+            quote! { #ident: Default + Clone + std::fmt::Debug + Sync + Send
             + 'static}
         })
         .collect();
@@ -409,39 +378,39 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
     let expanded = quote! {
 
         /// Inbound hub for the zip actor.
-        #[derive(Clone,Debug)]
+        #[derive(Clone, std::fmt::Debug)]
         pub struct #inbound_struct<
-            Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord
+            Key: Default + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord
                  + Sync + Send + 'static,
             #( #type_with_bounds_seq ),*
         > {
             #(
-                /// Inbound channel for the Xth inbound channel.
-                pub #item_seq5: #channel
+                /// Inbound channel for the Nth inbound channel.
+                pub #item_seq: #channel
             ),*
         }
 
         impl<
-                Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord
+                Key: Default + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord
                      + Sync + Send + 'static,
                 #( #type_with_bounds_seq ),*
             >
             IsInboundHub<
                 NullProp,
-                #state_struct<Key, #( #type_seq4),*>,
-                #outbound_struct<Key, #( #type_seq5),*>,
+                #state_struct<Key, #( #type_seq ),*>,
+                #outbound_struct<Key, #( #type_seq ),*>,
                 NullOutRequests,
-                #inbound_message_enum<Key, #( #type_seq6),*>,
+                #inbound_message_enum<Key, #( #type_seq ),*>,
                 NullInRequestMessage,
-            > for #inbound_struct<Key, #( #type_seq7),*>
+            > for #inbound_struct<Key, #( #type_seq ),*>
         {
             fn from_builder(
                 builder: &mut ActorBuilder<
                     NullProp,
-                    #state_struct<Key, #( #type_seq8),*>,
-                    #outbound_struct<Key, #( #type_seq9),*>,
+                    #state_struct<Key, #( #type_seq ),*>,
+                    #outbound_struct<Key, #( #type_seq ),*>,
                     NullOutRequests,
-                    #inbound_message_enum<Key, #( #type_seq10),*>,
+                    #inbound_message_enum<Key, #( #type_seq ),*>,
                     NullInRequestMessage,
                 >,
                 actor_name: &str,
@@ -451,14 +420,14 @@ pub(crate) fn zip_inbound_n_impl(input: TokenStream) -> TokenStream {
                     builder.context,
                     actor_name,
                     &builder.sender,
-                    stringify!(#type_seq12).to_owned(),
+                    stringify!(#type_seq).to_owned(),
                 );
                 builder
                     .forward
-                    .insert(#item_seq2.name.clone(), Box::new(#item_seq3.clone()));
+                    .insert(#item_seq.name.clone(), Box::new(#item_seq.clone()));
                 )*
 
-                Self { #( #item_seq4 ),* }
+                Self { #( #item_seq ),* }
             }
         }
     };
@@ -475,32 +444,30 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
     let tuple_struct = format_ident!("Tuple{}", num_fields);
     let inbound_message_enum = format_ident!("Zip{}IsInboundMessage", num_fields);
 
-    let type_seq = (0..num_fields).map(|i| format_ident!("Item{}", i));
+    let type_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("Item{}", i))
+        .collect();
 
     let type_with_bounds_seq: Vec<_> = (0..num_fields)
         .map(|i| {
             let ident = format_ident!("Item{}", i);
             quote! {
-                #ident: Default + Clone + Debug + Sync + Send + 'static
+                #ident: Default + Clone + std::fmt::Debug + Sync + Send + 'static
             }
         })
         .collect();
 
     let front_seq = (0..num_fields).map(|i| format_ident!("front{}", i));
 
-    let item_seq = (0..num_fields).map(|i| format_ident!("item{}", i));
-    let item_seq2 = item_seq.clone();
-    let item_seq3 = item_seq.clone();
+    let item_seq: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("item{}", i))
+        .collect();
 
-    let item_heap = (0..num_fields).map(|i| format_ident!("item{}_heap", i));
-    let item_heap2 = item_heap.clone();
-    let item_heap3 = item_heap.clone();
+    let item_heap: Vec<_> = (0..num_fields)
+        .map(|i| format_ident!("item{}_heap", i))
+        .collect();
 
-    let key_seq = (0..num_fields).map(|i| format_ident!("key{}", i));
-    let key_seq2 = key_seq.clone();
-    let key_seq3 = key_seq.clone();
-    let key_seq4 = key_seq.clone();
-    let key_seq5 = key_seq.clone();
+    let key_seq: Vec<_> = (0..num_fields).map(|i| format_ident!("key{}", i)).collect();
 
     let case: Vec<_> = (0..num_fields)
         .map(|i| {
@@ -511,7 +478,7 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
 
             quote! {
                 #inbound_message_enum::#item_type(msg) => {
-                    state.#item_heap.push(Reverse(msg));
+                    state.#item_heap.push(std::cmp::Reverse(msg));
                     loop {
                         if #( state.#item_heap_seq.len() == 0 )||*
                         {
@@ -526,8 +493,12 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
 
-        impl<Key: Default + Clone + Debug + PartialEq + Eq + PartialOrd + Ord + Sync + Send,
-            #( #type_with_bounds_seq ),*> HasOnMessage for #inbound_message_enum<Key, #(#type_seq), *>
+        impl<
+            Key: Default + Clone + std::fmt::Debug + PartialEq + Eq + PartialOrd + Ord + Sync
+                + Send,
+            #( #type_with_bounds_seq ),*
+        >
+            HasOnMessage for #inbound_message_enum<Key, #(#type_seq), *>
         {
             fn on_message(
                 self,
@@ -538,27 +509,29 @@ pub(crate) fn zip_onmessage_n_impl(input: TokenStream) -> TokenStream {
             {
                 let check_and_send = |s: &mut Self::State| {
                     #(
-                    let #front_seq = s.#item_heap.peek().unwrap();
-                    let #key_seq2 = #front_seq.0.key.clone();
+                        let #front_seq = s.#item_heap.peek().unwrap();
+                        let #key_seq = #front_seq.0.key.clone();
                     )*
 
                     let mut min = key0.clone();
                     #(
-                    min = std::cmp::min(#key_seq3.clone(), min.clone());
+                        min = std::cmp::min(#key_seq.clone(), min.clone());
                     )*
 
-                    if #(#key_seq4 == min) && * {
-                        #(let #item_seq = s.#item_heap2.pop().unwrap();)*
+                    if #(#key_seq == min) && * {
+                        #(
+                            let #item_seq = s.#item_heap.pop().unwrap();
+                        )*
 
                         outbound.zipped.send(#tuple_struct {
                             key: min,
-                            #(#item_seq2 : #item_seq3.0.value),*
+                            #(#item_seq : #item_seq.0.value),*
                         });
                         return;
                     }
                     #(
-                    if #key_seq5 == min {
-                        s.#item_heap3.pop();
+                    if #key_seq == min {
+                        s.#item_heap.pop();
                     }
                     )*
                 };

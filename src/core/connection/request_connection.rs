@@ -4,6 +4,7 @@ use crate::prelude::*;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::SendError;
+use tracing::warn;
 
 pub(crate) trait GenericRequestConnection<T>: Send + Sync {
     fn send_impl(&self, msg: T);
@@ -25,8 +26,8 @@ impl<T: Send + Sync, M: IsInRequestMessageNew<T>> GenericRequestConnection<T>
         let handler = tokio::spawn(async move {
             match c.send(msg) {
                 Ok(_) => {}
-                Err(SendError(_)) => {
-                    println!("SendError");
+                Err(SendError(e)) => {
+                    warn!("Send request message error: {:?}", e);
                 }
             }
         });

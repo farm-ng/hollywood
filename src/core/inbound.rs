@@ -4,15 +4,15 @@ use crate::prelude::*;
 pub trait IsInboundHub<
     Prop,
     State,
-    IsOutboundHub,
-    Request: IsOutRequestHub<M>,
+    OutboundHub,
+    OutRequest: IsOutRequestHub<M>,
     M: IsInboundMessage,
     R: IsInRequestMessage,
 >: Send + Sync
 {
     /// Create a new inbound hub for an actor.
     fn from_builder(
-        builder: &mut ActorBuilder<Prop, State, IsOutboundHub, Request, M, R>,
+        builder: &mut ActorBuilder<Prop, State, OutboundHub, OutRequest, M, R>,
         actor_name: &str,
     ) -> Self;
 }
@@ -24,14 +24,22 @@ pub struct NullInbound {}
 impl<
         Prop,
         State,
-        IsOutboundHub,
+        OutboundHub,
         InRequestMessage: IsInRequestMessage,
         Message: IsInboundMessage,
-        Request: IsOutRequestHub<Message>,
-    > IsInboundHub<Prop, State, IsOutboundHub, Request, Message, InRequestMessage> for NullInbound
+        OutRequest: IsOutRequestHub<Message>,
+    > IsInboundHub<Prop, State, OutboundHub, OutRequest, Message, InRequestMessage>
+    for NullInbound
 {
     fn from_builder(
-        _builder: &mut ActorBuilder<Prop, State, IsOutboundHub, Request, Message, InRequestMessage>,
+        _builder: &mut ActorBuilder<
+            Prop,
+            State,
+            OutboundHub,
+            OutRequest,
+            Message,
+            InRequestMessage,
+        >,
         _actor_name: &str,
     ) -> Self {
         Self {}
@@ -108,14 +116,14 @@ pub trait IsInboundMessageNew<T>:
 }
 
 /// Message forwarder.
-pub trait HasForwardMessage<Prop, State, IsOutboundHub, IsRequestHub, M: IsInboundMessage> {
+pub trait HasForwardMessage<Prop, State, OutboundHub, OutRequestHub, M: IsInboundMessage> {
     /// Forward the message to the HasOnMessage customization point.
     fn forward_message(
         &self,
         prop: &Prop,
         state: &mut State,
-        outbound: &IsOutboundHub,
-        request: &IsRequestHub,
+        outbound: &OutboundHub,
+        request: &OutRequestHub,
         msg: M,
     );
 }

@@ -7,7 +7,7 @@ pub struct MovingAverageOutbound {
     pub average: OutboundChannel<f64>,
 
     /// Cancel request, to request aborting compute pipeline execution.
-    pub cancel_request: OutboundChannel<()>,
+    pub cancel_request: OutboundChannel<CancelRequest>,
 }
 
 /// Properties of the MovingAverage actor.
@@ -30,11 +30,11 @@ pub struct MovingAverageState {
 ///
 #[derive(Clone, Debug)]
 #[actor_inputs(
-    MovingAverageInbound, 
+    MovingAverageInbound,
     {
-        MovingAverageProp, 
-        MovingAverageState, 
-        MovingAverageOutbound, 
+        MovingAverageProp,
+        MovingAverageState,
+        MovingAverageOutbound,
         NullOutRequests,
         NullInRequestMessage
     })]
@@ -58,7 +58,7 @@ impl HasOnMessage for MovingAverageMessage {
                     (prop.alpha * new_value) + (1.0 - prop.alpha) * state.moving_average;
                 outbound.average.send(state.moving_average);
                 if new_value > &prop.timeout {
-                    outbound.cancel_request.send(());
+                    outbound.cancel_request.send(CancelRequest);
                 }
             }
         }

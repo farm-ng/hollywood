@@ -1,4 +1,3 @@
-use crate::core::runner::Runner;
 use crate::prelude::*;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -47,7 +46,7 @@ pub trait HasFromPropState<
     M: IsInboundMessage,
     R: IsInRequestMessage,
     OutRequest: IsOutRequestHub<M>,
-    Run: Runner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>,
+    Run: IsRunner<Prop, Inbound, InRequest, State, Outbound, OutRequest, M, R>,
 >
 {
     /// Produces a hint for the actor. The name_hint is used as a base to
@@ -64,23 +63,47 @@ pub trait HasFromPropState<
     ) -> GenericActor<Prop, Inbound, InRequest, State, Outbound, OutRequest, Run> {
         let actor_name = context.add_new_unique_name(Self::name_hint(&prop).to_string());
         let out = Outbound::from_context_and_parent(context, &actor_name);
-
         let mut builder = ActorBuilder::<Prop, State, Outbound, OutRequest, M, R>::new(
             context,
             &actor_name,
             prop,
             initial_state,
         );
-
         let out_request = OutRequest::from_parent_and_sender(&actor_name, &builder.sender);
-
         let inbound = Inbound::from_builder(&mut builder, &actor_name);
         let in_request = InRequest::from_builder(&mut builder, &actor_name);
-        builder.build::<Inbound, InRequest, Run>(inbound, in_request, out, out_request)
+        builder.build::<Inbound, InRequest, Run>(inbound, in_request, out, out_request, None)
+    }
+
+    /// Called by when the pipeline on shutdown.
+    fn with_on_exit_fn(
+        context: &mut Hollywood,
+        prop: Prop,
+        initial_state: State,
+        on_exit_fn: Box<dyn FnOnce() + Send + Sync + 'static>,
+    ) -> GenericActor<Prop, Inbound, InRequest, State, Outbound, OutRequest, Run> {
+        let actor_name = context.add_new_unique_name(Self::name_hint(&prop).to_string());
+        let out = Outbound::from_context_and_parent(context, &actor_name);
+        let mut builder = ActorBuilder::<Prop, State, Outbound, OutRequest, M, R>::new(
+            context,
+            &actor_name,
+            prop,
+            initial_state,
+        );
+        let out_request = OutRequest::from_parent_and_sender(&actor_name, &builder.sender);
+        let inbound = Inbound::from_builder(&mut builder, &actor_name);
+        let in_request = InRequest::from_builder(&mut builder, &actor_name);
+        builder.build::<Inbound, InRequest, Run>(
+            inbound,
+            in_request,
+            out,
+            out_request,
+            Some(on_exit_fn),
+        )
     }
 }
 
-/// Actor node of the pipeline. It is created by the [Runner::new_actor_node()] method.
+/// Actor node of the pipeline. It is created by the [IsRunner::new_actor_node()] method.
 #[async_trait]
 pub trait IsActorNode {
     /// Return the actor's name.
@@ -100,6 +123,9 @@ pub trait IsActorNode {
     /// Note: It is an async function which returns a future a completion handler. This method is
     /// not intended to be called directly but is called by the runtime of the pipeline.
     async fn run(&mut self, kill: tokio::sync::broadcast::Receiver<()>);
+
+    /// on exit
+    fn on_exit(&mut self);
 }
 
 /// A table to forward outbound messages to message handlers of downstream actors.
@@ -122,6 +148,7 @@ pub(crate) struct ActorNodeImpl<Prop, State, OutboundHub, OutRequestHub, M, R> {
     pub(crate) forward_request: ForwardRequestTable<Prop, State, OutboundHub, OutRequestHub, R>,
     pub(crate) request_receiver: Option<tokio::sync::mpsc::UnboundedReceiver<R>>,
     pub(crate) out_request: OutRequestHub,
+    pub(crate) on_exit_fn: Option<Box<dyn FnOnce() + Send + Sync + 'static>>,
 }
 
 impl<Prop, State, Outbound: IsOutboundHub, Request, R: IsInRequestMessage, M: IsInboundMessage>
@@ -164,6 +191,13 @@ impl<
         .await;
         self.state = Some(state);
         self.receiver = Some(recv);
+        self.on_exit();
+    }
+
+    fn on_exit(&mut self) {
+        if let Some(f) = self.on_exit_fn.take() {
+            f();
+        }
     }
 }
 
@@ -178,18 +212,19 @@ pub(crate) async fn on_message<
     Prop,
     State,
     Outbound: Sync + Send,
-    Request: Sync + Send,
+    OutRequest: Sync + Send,
     M: IsInboundMessage,
     R: IsInRequestMessage,
 >(
     _actor_name: String,
     prop: &Prop,
     mut values: OnMessageMutValues<State, M, R>,
-    forward: &ForwardTable<Prop, State, Outbound, Request, M>,
-    forward_request: &ForwardRequestTable<Prop, State, Outbound, Request, R>,
+    forward: &ForwardTable<Prop, State, Outbound, OutRequest, M>,
+    forward_request: &ForwardRequestTable<Prop, State, Outbound, OutRequest, R>,
     outbound: &Outbound,
-    request: &Request,
+    out_request: &OutRequest,
 ) -> (State, tokio::sync::mpsc::UnboundedReceiver<M>) {
+    let mut requests_open = true;
     loop {
         select! {
             _ = values.kill.recv() => {
@@ -208,18 +243,20 @@ pub(crate) async fn on_message<
                 if t.is_none() {
                     continue;
                 }
-                t.unwrap().forward_message(prop, &mut values.state, outbound, request, m);
+                t.unwrap().forward_message(prop, &mut values.state, outbound, out_request, m);
             },
-            m = values.request_receiver.recv() => {
-                if m.is_some() {
-                    let m = m.unwrap();
-                    let t = forward_request.get(&m.in_request_channel());
-                    if t.is_none() {
-                        continue;
+            m = values.request_receiver.recv(), if requests_open => {
+                match m {
+                    Some(r) => {
+                        let t = forward_request.get(&r.in_request_channel());
+                        if let Some(handler) = t {
+                            handler.forward_message(
+                                prop, &mut values.state, outbound, out_request, r);
+                        }
+                    },
+                    None => {
+                        requests_open = false;
                     }
-                    t.unwrap().forward_message(prop, &mut values.state, outbound, request, m);
-                } else{
-                    tokio::task::yield_now().await;
                 }
             }
         }

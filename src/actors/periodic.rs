@@ -1,7 +1,4 @@
-use crate::core::connection::ConnectionEnum;
 use crate::prelude::*;
-use crate::GenericActor;
-use crate::Runner;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -32,8 +29,6 @@ impl Periodic {
                 time_elapsed: 0.0,
             },
         )
-
-        // todo!()
     }
 }
 
@@ -118,7 +113,7 @@ impl IsOutboundHub for PeriodicOutbound {
 pub struct PeriodicRunner {}
 
 impl
-    Runner<
+    IsRunner<
         PeriodicProp,
         NullInbound,
         NullInRequests,
@@ -168,6 +163,7 @@ impl
             tokio::sync::mpsc::UnboundedReceiver<NullInRequestMessage>,
             NullOutRequests,
         ),
+        _on_exit_fn: Option<Box<dyn FnOnce() + Send + Sync + 'static>>,
     ) -> Box<dyn IsActorNode + Send + Sync> {
         Box::new(PeriodicActor {
             name: name.clone(),
@@ -232,5 +228,9 @@ impl IsActorNode for PeriodicActor {
                 }
             }
         }
+    }
+
+    fn on_exit(&mut self) {
+        // do nothing
     }
 }
